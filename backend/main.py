@@ -87,15 +87,26 @@ def load_plugins():
     
     for item in os.listdir(PLUGINS_DIR):
         item_path = os.path.join(PLUGINS_DIR, item)
-        if os.path.isdir(item_path) and os.path.exists(os.path.join(item_path, "main.py")):
+        # Check for legacy structure (main.py) or new structure (backend/main.py)
+        main_py = os.path.join(item_path, "main.py")
+        backend_main_py = os.path.join(item_path, "backend", "main.py")
+        
+        target_path = None
+        if os.path.isdir(item_path):
+            if os.path.exists(backend_main_py):
+                target_path = backend_main_py
+            elif os.path.exists(main_py):
+                target_path = main_py
+                
+        if target_path:
             try:
-                spec = importlib.util.spec_from_file_location(f"plugins.{item}", os.path.join(item_path, "main.py"))
+                spec = importlib.util.spec_from_file_location(f"plugins.{item}", target_path)
                 module = importlib.util.module_from_spec(spec)
                 spec.loader.exec_module(module)
                 
                 if hasattr(module, "router"):
                     app.include_router(module.router, prefix=f"/plugins/{item}", tags=[item])
-                    print(f"Loaded router for plugin: {item}")
+                    print(f"Loaded router for plugin: {item} from {target_path}")
             except Exception as e:
                 print(f"Failed to load plugin {item}: {e}")
 
@@ -106,7 +117,9 @@ async def list_plugins():
     plugins = []
     for item in os.listdir(PLUGINS_DIR):
         item_path = os.path.join(PLUGINS_DIR, item)
-        if os.path.isdir(item_path) and os.path.exists(os.path.join(item_path, "main.py")):
+        main_py = os.path.join(item_path, "main.py")
+        backend_main_py = os.path.join(item_path, "backend", "main.py")
+        if os.path.isdir(item_path) and (os.path.exists(main_py) or os.path.exists(backend_main_py)):
             plugins.append({"name": item, "status": "active"})
     return plugins
 
