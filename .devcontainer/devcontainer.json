@@ -63,6 +63,10 @@
     "remoteEnv": {
         "PYTHONUNBUFFERED": "1"
     },
+    // Mount Claude Code configuration directory
+    "mounts": [
+        "source=${localEnv:HOME}/.claude,target=/home/vscode/.claude,type=bind,consistency=cached"
+    ],
     // Features to add to the dev container
     "features": {
         "ghcr.io/devcontainers/features/git:1": {},

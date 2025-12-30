@@ -8,13 +8,13 @@ ENV DEBIAN_FRONTEND=noninteractive
 RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
     && apt-get update \
     && apt-get install -y --no-install-recommends \
-        nodejs \
-        git \
-        curl \
-        wget \
-        vim \
-        sudo \
-        ca-certificates \
+    nodejs \
+    git \
+    curl \
+    wget \
+    vim \
+    sudo \
+    ca-certificates \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
@@ -39,6 +39,9 @@ RUN chown -R $USERNAME:$USERNAME /workspace
 
 # Switch back to dialog for any ad-hoc use of apt-get
 ENV DEBIAN_FRONTEND=dialog
+
+# Install Claude Code CLI globally
+RUN npm install -g @anthropic-ai/claude-code
 
 # Set the default user
 USER $USERNAME

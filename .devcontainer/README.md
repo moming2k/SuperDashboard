@@ -13,6 +13,7 @@ This directory contains the DevContainer configuration for the SuperDashboard pr
 - ✅ Python 3.11 with pip
 - ✅ Node.js 20 with npm
 - ✅ Git and GitHub CLI
+- ✅ Claude Code CLI (Anthropic's AI coding assistant)
 - ✅ VS Code extensions for Python, React, and Tailwind CSS
 - ✅ Port forwarding for backend (8000) and frontend (5173)
 - ✅ Automatic dependency installation on container creation
@@ -43,6 +44,26 @@ cd frontend
 npm run dev
 ```
 Frontend will be available at http://localhost:5173
+
+### Using Claude Code CLI
+```bash
+# First time: Login to Claude
+claude login
+
+# Start an interactive session
+claude
+
+# Or run a specific command
+claude "add error handling to the backend API"
+```
+
+Claude Code CLI is an AI coding assistant that can:
+- Understand your codebase
+- Edit files and execute commands
+- Manage Git workflows
+- Answer coding questions
+
+Your Claude authentication will persist across container rebuilds.
 
 ## Environment Variables
 
