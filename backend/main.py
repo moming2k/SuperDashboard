@@ -50,15 +50,19 @@ class ChatMessage(BaseModel):
     role: str
     content: str
 
+class ChatRequest(BaseModel):
+    messages: List[ChatMessage]
+    model: Optional[str] = "gpt-4"  # Default to GPT-4
+
 @app.post("/agents/ask")
-async def ask_agent(messages: List[ChatMessage]):
+async def ask_agent(request: ChatRequest):
     if not client.api_key:
         return {"error": "OpenAI API key not set"}
     try:
         # Convert Pydantic models to dicts for OpenAI
-        message_dicts = [{"role": m.role, "content": m.content} for m in messages]
+        message_dicts = [{"role": m.role, "content": m.content} for m in request.messages]
         response = client.chat.completions.create(
-            model="gpt-4",
+            model=request.model,  # Use the model from request
             messages=message_dicts
         )
         return {"response": response.choices[0].message.content}
@@ -142,6 +146,41 @@ async def list_plugins():
                     pass
             plugins.append({"name": item, "status": "active", "manifest": manifest})
     return plugins
+
+@app.get("/models")
+async def list_models():
+    """List available AI models"""
+    return {
+        "models": [
+            {
+                "id": "gpt-4",
+                "name": "GPT-4",
+                "description": "Most capable, best for complex tasks",
+                "provider": "openai"
+            },
+            {
+                "id": "gpt-4-turbo",
+                "name": "GPT-4 Turbo",
+                "description": "Faster GPT-4 with 128k context",
+                "provider": "openai"
+            },
+            {
+                "id": "gpt-3.5-turbo",
+                "name": "GPT-3.5 Turbo",
+                "description": "Fast and efficient",
+                "provider": "openai"
+            }
+        ]
+    }
+
+@app.get("/mcp/status")
+async def mcp_status():
+    """Get MCP server status"""
+    return {
+        "enabled": False,
+        "servers": [],
+        "message": "MCP support is available but not configured. Add MCP server configuration to enable."
+    }
 
 if __name__ == "__main__":
     import uvicorn

@@ -1,0 +1,6 @@
+{
+    "name": "whatsapp",
+    "displayName": "WhatsApp Messages",
+    "replaces": "tasks",
+    "frontendComponent": "WhatsAppMessages"
+}

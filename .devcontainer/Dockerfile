@@ -40,8 +40,11 @@ RUN chown -R $USERNAME:$USERNAME /workspace
 # Switch back to dialog for any ad-hoc use of apt-get
 ENV DEBIAN_FRONTEND=dialog
 
-# Install Claude Code CLI using official installation script
-RUN curl -fsSL https://claude.ai/install.sh | bash
-
 # Set the default user
 USER $USERNAME
+
+# Install Claude Code CLI as vscode user
+RUN curl -fsSL https://claude.ai/install.sh | bash
+
+# Add Claude to PATH for the vscode user
+ENV PATH="/home/vscode/.local/bin:${PATH}"

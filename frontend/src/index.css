@@ -41,4 +41,160 @@
       transform: translateY(0);
     }
   }
+
+  /* Markdown Prose Styling */
+  .markdown-prose {
+    @apply text-text-main leading-relaxed;
+  }
+
+  .markdown-prose p {
+    @apply my-2;
+  }
+
+  .markdown-prose h1,
+  .markdown-prose h2,
+  .markdown-prose h3,
+  .markdown-prose h4 {
+    @apply font-semibold my-3 text-text-main;
+  }
+
+  .markdown-prose h1 {
+    @apply text-2xl;
+  }
+
+  .markdown-prose h2 {
+    @apply text-xl;
+  }
+
+  .markdown-prose h3 {
+    @apply text-lg;
+  }
+
+  .markdown-prose ul,
+  .markdown-prose ol {
+    @apply my-2 ml-6;
+  }
+
+  .markdown-prose ul {
+    @apply list-disc;
+  }
+
+  .markdown-prose ol {
+    @apply list-decimal;
+  }
+
+  .markdown-prose li {
+    @apply my-1;
+  }
+
+  .markdown-prose a {
+    @apply text-primary hover:text-primary-hover underline;
+  }
+
+  .markdown-prose blockquote {
+    @apply border-l-4 border-glass-border pl-4 italic my-3 text-text-muted;
+  }
+
+  .markdown-prose hr {
+    @apply my-4 border-glass-border;
+  }
+
+  .markdown-prose table {
+    @apply w-full my-4 border-collapse;
+  }
+
+  .markdown-prose th,
+  .markdown-prose td {
+    @apply border border-glass-border px-4 py-2;
+  }
+
+  .markdown-prose th {
+    @apply bg-glass font-semibold;
+  }
+
+  /* Code Block Styling */
+  .markdown-prose pre {
+    @apply bg-bg-dark/80 border border-glass-border rounded-xl p-4 my-4 overflow-x-auto;
+  }
+
+  .markdown-prose pre code {
+    @apply text-sm font-mono leading-relaxed;
+  }
+
+  .markdown-prose code {
+    @apply font-mono text-sm;
+  }
+
+  .codespan {
+    @apply bg-glass border border-glass-border text-accent px-2 py-0.5 rounded-md mx-0.5 font-mono text-xs;
+  }
+
+  /* Syntax Highlighting */
+  .hljs-comment,
+  .hljs-quote {
+    @apply text-gray-500;
+  }
+
+  .hljs-variable,
+  .hljs-template-variable,
+  .hljs-tag,
+  .hljs-name,
+  .hljs-selector-id,
+  .hljs-selector-class,
+  .hljs-regexp {
+    @apply text-red-400;
+  }
+
+  .hljs-number,
+  .hljs-built_in,
+  .hljs-literal,
+  .hljs-type,
+  .hljs-params {
+    @apply text-orange-400;
+  }
+
+  .hljs-string,
+  .hljs-symbol,
+  .hljs-bullet {
+    @apply text-green-400;
+  }
+
+  .hljs-title,
+  .hljs-section {
+    @apply text-yellow-400;
+  }
+
+  .hljs-keyword,
+  .hljs-selector-tag {
+    @apply text-blue-400;
+  }
+
+  .hljs-attr,
+  .hljs-attribute {
+    @apply text-cyan-400;
+  }
+
+  /* Custom Scrollbar */
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  ::-webkit-scrollbar-track {
+    @apply bg-transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    @apply bg-glass-border rounded-full;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-text-muted;
+  }
+
+  /* Scrollbar for Firefox */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255, 255, 255, 0.1) transparent;
+  }
 }
