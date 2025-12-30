@@ -66,19 +66,9 @@ async def get_jira_issues(project_key: Optional[str] = None):
     
     url = f"{JIRA_URL}/rest/api/3/search"
 
-    # Normalize base JQL to avoid malformed queries when it's empty or whitespace
-    base_jql = (JIRA_JQL or "").strip()
-
+    jql = JIRA_JQL
     if project_key:
-        # If a project is specified and there is additional JQL, combine them with AND.
-        # Otherwise, just filter by project.
-        if base_jql:
-            jql = f"project = '{project_key}' AND {base_jql}"
-        else:
-            jql = f"project = '{project_key}'"
-    else:
-        # No project filter; use the base JQL as-is (may be empty, which Jira accepts).
-        jql = base_jql
+        jql = f"project = '{project_key}' AND {jql}"
 
     payload = {
         "jql": jql,

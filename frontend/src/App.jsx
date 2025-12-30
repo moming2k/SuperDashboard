@@ -70,8 +70,10 @@ function App() {
   };
 
   useEffect(() => {
-    fetchTasks();
-    fetchPlugins();
+    (async () => {
+        await fetchTasks();
+        await fetchPlugins();
+    })();
   }, []);
 
   const askAgent = async () => {
@@ -97,7 +99,7 @@ function App() {
       setAiResponse(data.response || data.error);
       setActiveTab('agent');
     } catch {
-      setAiResponse("Error analyzing tasks.");
+      setAiResponse("Error analyzed tasks.");
     }
     setIsLoading(false);
   };

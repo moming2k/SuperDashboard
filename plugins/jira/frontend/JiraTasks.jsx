@@ -7,17 +7,15 @@ export default function JiraTasks() {
     const [isLoading, setIsLoading] = useState(false);
     const [selectedIssue, setSelectedIssue] = useState(null);
     const [jiraProjects, setJiraProjects] = useState([]);
-    const [selectedProject, setSelectedProject] = useState('');
+    const [selectedProject, setSelectedProject] = useState(null);
     const [jiraComments, setJiraComments] = useState([]);
     const [newComment, setNewComment] = useState('');
 
     useEffect(() => {
         fetchJiraProjects();
+        fetchJiraIssues();
     }, []);
 
-    useEffect(() => {
-        fetchJiraIssues(selectedProject);
-    }, [selectedProject]);
     const handleProjectChange = (projectKey) => {
         setSelectedProject(projectKey);
         fetchJiraIssues(projectKey);
@@ -99,6 +97,7 @@ export default function JiraTasks() {
                 <h1 className="text-3xl font-bold">Jira Issue Tracker</h1>
                 <div className="flex gap-4 items-center">
                     <select
+                        value={selectedProject || ''}
                         onChange={(e) => handleProjectChange(e.target.value)}
                         className="bg-glass border border-glass-border p-2 px-4 rounded-lg hover:bg-glass/20 transition-colors disabled:opacity-50"
                     >

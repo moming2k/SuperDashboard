@@ -1,0 +1,25 @@
+
+> frontend@0.0.0 dev
+> vite
+
+
+  VITE v7.3.0  ready in 842 ms
+
+  ➜  Local:   http://localhost:5173/
+  ➜  Network: use --host to expose
+5:15:13 PM [vite] (client) warning: invalid import "./plugins/${plugin.name}/${plugin.manifest.frontendComponent}". A file extension must be included in the static part of the import. For example: import(`./foo/${bar}.js`).
+  Plugin: vite:dynamic-import-vars
+  File: /app/frontend/src/App.jsx
+5:15:13 PM [vite] (client) warning:
+/app/frontend/src/App.jsx
+37 |    if (!plugin || !plugin.manifest?.frontendComponent) return null;
+38 |    if (!componentCache[plugin.name]) {
+39 |      componentCache[plugin.name] = lazy(() => import(`./plugins/${plugin.name}/${plugin.manifest.frontendComponent}`));
+   |                                                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+40 |    }
+41 |    const Component = componentCache[plugin.name];
+The above dynamic import cannot be analyzed by Vite.
+See https://github.com/rollup/plugins/tree/master/packages/dynamic-import-vars#limitations for supported dynamic import formats. If this is intended to be left as-is, you can use the /* @vite-ignore */ comment inside the import() call to suppress this warning.
+
+  Plugin: vite:import-analysis
+  File: /app/frontend/src/App.jsx
