@@ -1,0 +1,42 @@
+version: '3.8'
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+
+    volumes:
+      # Mount the project directory
+      - ..:/workspace:cached
+
+      # Persist bash history
+      - ~/.bash_history:/home/vscode/.bash_history
+
+      # Persist Python packages (optional, for faster rebuilds)
+      - venv-data:/workspace/backend/venv
+
+      # Persist node_modules (optional, for faster rebuilds)
+      - node-modules-data:/workspace/frontend/node_modules
+
+    # Overrides default command so things don't shut down after the process ends.
+    command: sleep infinity
+
+    # Expose ports for backend and frontend
+    ports:
+      - "8000:8000"
+      - "5173:5173"
+
+    # Environment variables
+    environment:
+      - PYTHONUNBUFFERED=1
+
+    # Load environment variables from .env file if it exists
+    env_file:
+      - ../backend/.env
+    # Use host network mode for easier development (optional)
+    # network_mode: host
+
+volumes:
+  venv-data:
+  node-modules-data:
