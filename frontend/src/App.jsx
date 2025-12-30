@@ -70,10 +70,8 @@ function App() {
   };
 
   useEffect(() => {
-    (async () => {
-        await fetchTasks();
-        await fetchPlugins();
-    })();
+    fetchTasks();
+    fetchPlugins();
   }, []);
 
   const askAgent = async () => {
