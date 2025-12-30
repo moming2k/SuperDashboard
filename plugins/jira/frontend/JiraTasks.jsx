@@ -13,9 +13,11 @@ export default function JiraTasks() {
 
     useEffect(() => {
         fetchJiraProjects();
-        fetchJiraIssues();
     }, []);
 
+    useEffect(() => {
+        fetchJiraIssues(selectedProject);
+    }, [selectedProject]);
     const handleProjectChange = (projectKey) => {
         setSelectedProject(projectKey);
         fetchJiraIssues(projectKey);
