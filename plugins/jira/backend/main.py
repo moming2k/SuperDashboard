@@ -37,25 +37,40 @@ async def get_jira_issues():
     if not all([JIRA_URL, JIRA_EMAIL, JIRA_API_TOKEN]):
         raise HTTPException(status_code=400, detail="Jira credentials not configured")
     
-    url = f"{JIRA_URL}/rest/api/3/search"
-    params = {
+    url = f"{JIRA_URL}/rest/api/3/search/jql"
+    # Using POST for search as suggested by the migration message
+    payload = {
         "jql": JIRA_JQL,
-        "fields": "summary,description,status,priority,assignee,created,updated"
+        "fields": ["summary", "description", "status", "priority", "assignee", "created", "updated"],
+        "maxResults": 50
     }
     
     async with httpx.AsyncClient() as client:
-        response = await client.get(url, params=params, auth=auth)
+        response = await client.post(url, json=payload, auth=auth)
         if response.status_code != 200:
-            raise HTTPException(status_code=response.status_code, detail=response.text)
+            # Handle potential 410 or other errors with clear info
+            print(f"DEBUG JIRA ERROR: {response.status_code} - {response.text}")
+            raise HTTPException(status_code=response.status_code, detail=f"Jira API Error: {response.text}")
         
         data = response.json()
         issues = []
         for issue in data.get("issues", []):
             fields = issue["fields"]
+            
+            # Helper to get description text (Jira ADF format handling)
+            description_text = ""
+            desc = fields.get("description")
+            if desc and isinstance(desc, dict):
+                # Simple extraction from ADF
+                try:
+                    description_text = desc.get("content", [{}])[0].get("content", [{}])[0].get("text", "")
+                except (IndexError, KeyError):
+                    description_text = str(desc) # Fallback to raw string if parsing fails
+            
             issues.append(JiraIssue(
                 key=issue["key"],
                 summary=fields["summary"],
-                description=fields.get("description", {}).get("content", [{}])[0].get("content", [{}])[0].get("text", "") if fields.get("description") else "",
+                description=description_text,
                 status=fields["status"]["name"],
                 priority=fields["priority"]["name"],
                 assignee=fields["assignee"]["displayName"] if fields.get("assignee") else "Unassigned",

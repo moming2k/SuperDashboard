@@ -20,7 +20,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-openai.api_key = os.getenv("OPENAI_API_KEY")
+from openai import OpenAI
+client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 class Task(BaseModel):
     id: Optional[str] = None
@@ -45,14 +46,20 @@ async def create_task(task: Task):
     db_tasks.append(task)
     return task
 
+class ChatMessage(BaseModel):
+    role: str
+    content: str
+
 @app.post("/agents/ask")
-async def ask_agent(prompt: str):
-    if not openai.api_key:
+async def ask_agent(messages: List[ChatMessage]):
+    if not client.api_key:
         return {"error": "OpenAI API key not set"}
     try:
-        response = openai.ChatCompletion.create(
+        # Convert Pydantic models to dicts for OpenAI
+        message_dicts = [{"role": m.role, "content": m.content} for m in messages]
+        response = client.chat.completions.create(
             model="gpt-4",
-            messages=[{"role": "user", "content": prompt}]
+            messages=message_dicts
         )
         return {"response": response.choices[0].message.content}
     except Exception as e:
@@ -60,7 +67,7 @@ async def ask_agent(prompt: str):
 
 @app.post("/agents/analyze-tasks")
 async def analyze_tasks():
-    if not openai.api_key:
+    if not client.api_key:
         return {"error": "OpenAI API key not set"}
     if not db_tasks:
         return {"response": "No tasks to analyze."}
@@ -69,7 +76,7 @@ async def analyze_tasks():
     prompt = f"As an AI assistant for a Full Stack engineer, analyze these tasks and suggest the most critical one to work on next, and provide a brief implementation plan for it:\n\n{tasks_str}"
     
     try:
-        response = openai.ChatCompletion.create(
+        response = client.chat.completions.create(
             model="gpt-4",
             messages=[{"role": "user", "content": prompt}]
         )
