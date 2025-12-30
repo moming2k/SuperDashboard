@@ -49,18 +49,13 @@ function App() {
   const [aiResponse, setAiResponse] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
-  useEffect(() => {
-    fetchTasks();
-    fetchPlugins();
-  }, []);
-
   const fetchTasks = async () => {
     try {
       const res = await fetch(`${API_BASE}/tasks`);
       const data = await res.json();
       setTasks(data);
-    } catch (e) {
-      console.error("Failed to fetch tasks", e);
+    } catch {
+      console.error("Failed to fetch tasks");
     }
   };
 
@@ -69,10 +64,17 @@ function App() {
       const res = await fetch(`${API_BASE}/plugins`);
       const data = await res.json();
       setPlugins(data);
-    } catch (e) {
-      console.error("Failed to fetch plugins", e);
+    } catch {
+      console.error("Failed to fetch plugins");
     }
   };
+
+  useEffect(() => {
+    (async () => {
+        await fetchTasks();
+        await fetchPlugins();
+    })();
+  }, []);
 
   const askAgent = async () => {
     if (!aiPrompt) return;
@@ -83,7 +85,7 @@ function App() {
       });
       const data = await res.json();
       setAiResponse(data.response || data.error);
-    } catch (e) {
+    } catch {
       setAiResponse("Error communicating with AI agent.");
     }
     setIsLoading(false);
@@ -96,7 +98,7 @@ function App() {
       const data = await res.json();
       setAiResponse(data.response || data.error);
       setActiveTab('agent');
-    } catch (e) {
+    } catch {
       setAiResponse("Error analyzed tasks.");
     }
     setIsLoading(false);

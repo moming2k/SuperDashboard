@@ -32,15 +32,46 @@ class JiraIssue(BaseModel):
     created: str
     updated: str
 
+class JiraProject(BaseModel):
+    id: str
+    key: str
+    name: str
+
+@router.get("/projects", response_model=List[JiraProject])
+async def get_jira_projects():
+    if not all([JIRA_URL, JIRA_EMAIL, JIRA_API_TOKEN]):
+        raise HTTPException(status_code=400, detail="Jira credentials not configured")
+
+    url = f"{JIRA_URL}/rest/api/3/project"
+
+    async with httpx.AsyncClient() as client:
+        response = await client.get(url, auth=auth)
+        if response.status_code != 200:
+            raise HTTPException(status_code=response.status_code, detail=f"Jira API Error: {response.text}")
+
+        data = response.json()
+        projects = []
+        for project in data:
+            projects.append(JiraProject(
+                id=project["id"],
+                key=project["key"],
+                name=project["name"]
+            ))
+        return projects
+
 @router.get("/issues", response_model=List[JiraIssue])
-async def get_jira_issues():
+async def get_jira_issues(project_key: Optional[str] = None):
     if not all([JIRA_URL, JIRA_EMAIL, JIRA_API_TOKEN]):
         raise HTTPException(status_code=400, detail="Jira credentials not configured")
     
-    url = f"{JIRA_URL}/rest/api/3/search/jql"
-    # Using POST for search as suggested by the migration message
+    url = f"{JIRA_URL}/rest/api/3/search"
+
+    jql = JIRA_JQL
+    if project_key:
+        jql = f"project = '{project_key}' AND {jql}"
+
     payload = {
-        "jql": JIRA_JQL,
+        "jql": jql,
         "fields": ["summary", "description", "status", "priority", "assignee", "created", "updated"],
         "maxResults": 50
     }

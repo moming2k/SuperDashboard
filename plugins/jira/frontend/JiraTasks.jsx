@@ -6,17 +6,39 @@ export default function JiraTasks() {
     const [jiraIssues, setJiraIssues] = useState([]);
     const [isLoading, setIsLoading] = useState(false);
     const [selectedIssue, setSelectedIssue] = useState(null);
+    const [jiraProjects, setJiraProjects] = useState([]);
+    const [selectedProject, setSelectedProject] = useState(null);
     const [jiraComments, setJiraComments] = useState([]);
     const [newComment, setNewComment] = useState('');
 
     useEffect(() => {
+        fetchJiraProjects();
         fetchJiraIssues();
     }, []);
 
-    const fetchJiraIssues = async () => {
+    const handleProjectChange = (projectKey) => {
+        setSelectedProject(projectKey);
+        fetchJiraIssues(projectKey);
+    };
+
+    const fetchJiraProjects = async () => {
+        try {
+            const res = await fetch(`${API_BASE}/plugins/jira/projects`);
+            const data = await res.json();
+            setJiraProjects(Array.isArray(data) ? data : []);
+        } catch (e) {
+            console.error("Failed to fetch Jira projects", e);
+            setJiraProjects([]);
+        }
+    };
+
+    const fetchJiraIssues = async (projectKey = null) => {
         setIsLoading(true);
         try {
-            const res = await fetch(`${API_BASE}/plugins/jira/issues`);
+            const url = projectKey
+                ? `${API_BASE}/plugins/jira/issues?project_key=${projectKey}`
+                : `${API_BASE}/plugins/jira/issues`;
+            const res = await fetch(url);
             const data = await res.json();
             setJiraIssues(Array.isArray(data) ? data : []);
         } catch (e) {
@@ -74,9 +96,16 @@ export default function JiraTasks() {
             <div className="flex justify-between items-center mb-8">
                 <h1 className="text-3xl font-bold">Jira Issue Tracker</h1>
                 <div className="flex gap-4 items-center">
+                    <select
+                        onChange={(e) => handleProjectChange(e.target.value)}
+                        className="bg-glass border border-glass-border p-2 px-4 rounded-lg hover:bg-glass/20 transition-colors disabled:opacity-50"
+                    >
+                        <option value="">All Projects</option>
+                        {jiraProjects.map(p => <option key={p.key} value={p.key}>{p.name}</option>)}
+                    </select>
                     {isLoading && <span className="text-sm text-text-muted animate-pulse">Syncing...</span>}
                     <button
-                        onClick={fetchJiraIssues}
+                        onClick={() => fetchJiraIssues(selectedProject)}
                         disabled={isLoading}
                         className="bg-glass border border-glass-border p-2 px-4 rounded-lg hover:bg-glass/20 transition-colors disabled:opacity-50"
                     >
