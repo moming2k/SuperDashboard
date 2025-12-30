@@ -97,7 +97,7 @@ function App() {
       setAiResponse(data.response || data.error);
       setActiveTab('agent');
     } catch {
-      setAiResponse("Error analyzed tasks.");
+      setAiResponse("Error analyzing tasks.");
     }
     setIsLoading(false);
   };
