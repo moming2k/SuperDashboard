@@ -40,8 +40,8 @@ RUN chown -R $USERNAME:$USERNAME /workspace
 # Switch back to dialog for any ad-hoc use of apt-get
 ENV DEBIAN_FRONTEND=dialog
 
-# Install Claude Code CLI globally
-RUN npm install -g @anthropic-ai/claude-code
+# Install Claude Code CLI using official installation script
+RUN curl -fsSL https://claude.ai/install.sh | bash
 
 # Set the default user
 USER $USERNAME
