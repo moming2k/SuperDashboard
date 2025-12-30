@@ -11,7 +11,9 @@
       "Bash(source venv/bin/activate)",
       "Bash(python -m pip install:*)",
       "Bash(docker compose:*)",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push)"
     ]
   }
 }

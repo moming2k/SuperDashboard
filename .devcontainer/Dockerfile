@@ -43,8 +43,17 @@ ENV DEBIAN_FRONTEND=dialog
 # Set the default user
 USER $USERNAME
 
+# Ensure .bashrc exists for vscode user
+RUN touch /home/vscode/.bashrc
+
 # Install Claude Code CLI as vscode user
 RUN curl -fsSL https://claude.ai/install.sh | bash
 
 # Add Claude to PATH for the vscode user
 ENV PATH="/home/vscode/.local/bin:${PATH}"
+
+# Install rm-safely for safer rm operations
+RUN curl -fsSL https://raw.githubusercontent.com/zdk/rm-safely/main/rm-safely | bash -s install
+
+# Ensure rm-safely hook is loaded in non-interactive shells
+RUN echo '[ -f "$HOME/.rm-safely" ] && source "$HOME/.rm-safely"' >> /home/vscode/.bashrc
