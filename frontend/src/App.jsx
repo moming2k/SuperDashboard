@@ -1,7 +1,45 @@
-import React, { useState, useEffect } from 'react';
-import { JiraTasks } from './plugins/jira/JiraTasks';
+import React, { useState, useEffect, Suspense, lazy } from 'react';
 
 const API_BASE = 'http://localhost:8000';
+
+const componentCache = {};
+
+class ErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false };
+  }
+  static getDerivedStateFromError() { return { hasError: true }; }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="p-8 bg-red-500/10 border border-red-500/20 rounded-2xl text-red-400">
+          <h2 className="text-xl font-bold mb-2">Plugin Error</h2>
+          <p>This plugin failed to load or crashed. Please check the console for details.</p>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
+const PluginComponent = ({ plugin, props }) => {
+  if (!plugin || !plugin.manifest?.frontendComponent) return null;
+
+  if (!componentCache[plugin.name]) {
+    componentCache[plugin.name] = lazy(() => import(`./plugins/${plugin.name}/${plugin.manifest.frontendComponent}`));
+  }
+
+  const Component = componentCache[plugin.name];
+
+  return (
+    <ErrorBoundary>
+      <Suspense fallback={<div className="p-8 text-text-muted animate-pulse">Loading plugin: {plugin.name}...</div>}>
+        <Component {...props} />
+      </Suspense>
+    </ErrorBoundary>
+  );
+};
 
 function App() {
   const [activeTab, setActiveTab] = useState('dashboard');
@@ -10,11 +48,6 @@ function App() {
   const [aiPrompt, setAiPrompt] = useState('');
   const [aiResponse, setAiResponse] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-
-  // Jira State
-  const [jiraIssues, setJiraIssues] = useState([]);
-
-  const isJiraEnabled = plugins.some(p => p.name === 'jira');
 
   useEffect(() => {
     fetchTasks();
@@ -39,20 +72,6 @@ function App() {
     } catch (e) {
       console.error("Failed to fetch plugins", e);
     }
-  };
-
-  const fetchJiraIssues = async () => {
-    setIsLoading(true);
-    try {
-      const res = await fetch(`${API_BASE}/plugins/jira/issues`);
-      const data = await res.json();
-      if (Array.isArray(data)) {
-        setJiraIssues(data);
-      }
-    } catch (e) {
-      console.error("Failed to fetch Jira issues", e);
-    }
-    setIsLoading(false);
   };
 
   const askAgent = async () => {
@@ -97,6 +116,13 @@ function App() {
     document.getElementById('newTaskDesc').value = '';
   };
 
+  // Helper to find a plugin that replaces a specific view
+  const getPluginForView = (viewName) => {
+    return plugins.find(p => p.manifest?.replaces === viewName);
+  };
+
+  const tasksPlugin = getPluginForView('tasks');
+
   return (
     <div className="flex h-screen bg-bg-dark font-outfit text-text-main">
       {/* Sidebar */}
@@ -107,7 +133,7 @@ function App() {
         <nav className="flex flex-col gap-2">
           {[
             { id: 'dashboard', label: '📊 Dashboard' },
-            { id: 'tasks', label: isJiraEnabled ? '🏷️ Jira Tasks' : '✅ Tasks' },
+            { id: 'tasks', label: tasksPlugin ? `🏷️ ${tasksPlugin.manifest.displayName || 'Tasks'}` : '✅ Tasks' },
             { id: 'agent', label: '🤖 AI Agent' },
             { id: 'plugins', label: '🧩 Plugins' },
           ].map((tab) => (
@@ -132,7 +158,7 @@ function App() {
               <div className="bg-bg-card backdrop-blur-xl border border-glass-border rounded-[24px] p-8 shadow-2xl">
                 <h3 className="text-xl font-semibold mb-4">Quick Stats</h3>
                 <p className="text-text-muted mb-2">
-                  {isJiraEnabled ? 'Jira Issues:' : 'Pending Tasks:'} <span className="text-text-main font-bold">{isJiraEnabled ? jiraIssues.length : tasks.length}</span>
+                  Tasks: <span className="text-text-main font-bold">{tasks.length}</span>
                 </p>
                 <p className="text-text-muted">Active Plugins: <span className="text-text-main font-bold">{plugins.length}</span></p>
               </div>
@@ -159,12 +185,8 @@ function App() {
         )}
 
         {activeTab === 'tasks' && (
-          isJiraEnabled ? (
-            <JiraTasks
-              jiraIssues={jiraIssues}
-              fetchJiraIssues={fetchJiraIssues}
-              isLoading={isLoading}
-            />
+          tasksPlugin ? (
+            <PluginComponent plugin={tasksPlugin} />
           ) : (
             <div className="animate-fade">
               <h1 className="text-3xl font-bold mb-8">Task Tracker</h1>

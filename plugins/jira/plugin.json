@@ -1,0 +1,6 @@
+{
+    "name": "jira",
+    "displayName": "Jira Integration",
+    "replaces": "tasks",
+    "frontendComponent": "JiraTasks"
+}

@@ -114,13 +114,26 @@ load_plugins()
 
 @app.get("/plugins")
 async def list_plugins():
+    import json
     plugins = []
     for item in os.listdir(PLUGINS_DIR):
         item_path = os.path.join(PLUGINS_DIR, item)
+        if not os.path.isdir(item_path):
+            continue
+
         main_py = os.path.join(item_path, "main.py")
         backend_main_py = os.path.join(item_path, "backend", "main.py")
-        if os.path.isdir(item_path) and (os.path.exists(main_py) or os.path.exists(backend_main_py)):
-            plugins.append({"name": item, "status": "active"})
+        manifest_path = os.path.join(item_path, "plugin.json")
+        
+        if os.path.exists(main_py) or os.path.exists(backend_main_py):
+            manifest = {}
+            if os.path.exists(manifest_path):
+                try:
+                    with open(manifest_path, 'r') as f:
+                        manifest = json.load(f)
+                except:
+                    pass
+            plugins.append({"name": item, "status": "active", "manifest": manifest})
     return plugins
 
 if __name__ == "__main__":
