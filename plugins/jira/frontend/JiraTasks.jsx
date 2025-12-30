@@ -7,7 +7,7 @@ export default function JiraTasks() {
     const [isLoading, setIsLoading] = useState(false);
     const [selectedIssue, setSelectedIssue] = useState(null);
     const [jiraProjects, setJiraProjects] = useState([]);
-    const [selectedProject, setSelectedProject] = useState(null);
+    const [selectedProject, setSelectedProject] = useState('');
     const [jiraComments, setJiraComments] = useState([]);
     const [newComment, setNewComment] = useState('');
 
