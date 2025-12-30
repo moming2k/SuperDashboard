@@ -32,15 +32,56 @@ class JiraIssue(BaseModel):
     created: str
     updated: str
 
+class JiraProject(BaseModel):
+    id: str
+    key: str
+    name: str
+
+@router.get("/projects", response_model=List[JiraProject])
+async def get_jira_projects():
+    if not all([JIRA_URL, JIRA_EMAIL, JIRA_API_TOKEN]):
+        raise HTTPException(status_code=400, detail="Jira credentials not configured")
+
+    url = f"{JIRA_URL}/rest/api/3/project"
+
+    async with httpx.AsyncClient() as client:
+        response = await client.get(url, auth=auth)
+        if response.status_code != 200:
+            raise HTTPException(status_code=response.status_code, detail=f"Jira API Error: {response.text}")
+
+        data = response.json()
+        projects = []
+        for project in data:
+            projects.append(JiraProject(
+                id=project["id"],
+                key=project["key"],
+                name=project["name"]
+            ))
+        return projects
+
 @router.get("/issues", response_model=List[JiraIssue])
-async def get_jira_issues():
+async def get_jira_issues(project_key: Optional[str] = None):
     if not all([JIRA_URL, JIRA_EMAIL, JIRA_API_TOKEN]):
         raise HTTPException(status_code=400, detail="Jira credentials not configured")
     
-    url = f"{JIRA_URL}/rest/api/3/search/jql"
-    # Using POST for search as suggested by the migration message
+    url = f"{JIRA_URL}/rest/api/3/search"
+
+    # Normalize base JQL to avoid malformed queries when it's empty or whitespace
+    base_jql = (JIRA_JQL or "").strip()
+
+    if project_key:
+        # If a project is specified and there is additional JQL, combine them with AND.
+        # Otherwise, just filter by project.
+        if base_jql:
+            jql = f"project = '{project_key}' AND {base_jql}"
+        else:
+            jql = f"project = '{project_key}'"
+    else:
+        # No project filter; use the base JQL as-is (may be empty, which Jira accepts).
+        jql = base_jql
+
     payload = {
-        "jql": JIRA_JQL,
+        "jql": jql,
         "fields": ["summary", "description", "status", "priority", "assignee", "created", "updated"],
         "maxResults": 50
     }
