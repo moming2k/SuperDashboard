@@ -1,8 +1,9 @@
 # CLAUDE.md - SuperDashboard AI Assistant Guide
 
-> **Last Updated**: 2025-12-30
-> **Project**: SuperDashboard - Full-stack engineering dashboard with AI assistant and plugin system
+> **Last Updated**: 2025-12-31
+> **Project**: SuperDashboard - Full-stack engineering dashboard with AI assistant and micro-portal plugin system
 > **License**: MIT (Copyright 2025 Chris Chan)
+> **Architecture Version**: 2.0 (Micro-Portal System)
 
 This document serves as a comprehensive guide for AI assistants working on the SuperDashboard codebase. It explains the architecture, conventions, and workflows to help you make informed decisions when modifying or extending the system.
 
@@ -32,9 +33,12 @@ This document serves as a comprehensive guide for AI assistants working on the S
 
 ### Key Features
 
+- **Micro-Portal Architecture**: Each plugin is a self-contained portal with its own UI
+- **Zero-Config Plugin System**: Add plugins without modifying core App.jsx
 - **Task Management**: Create and track engineering tasks with status updates
 - **AI Assistant**: GPT-4 powered chat and task analysis
-- **Plugin System**: Manifest-driven, self-contained plugins with hot-loading
+- **Dynamic Tab System**: Manifest-driven tabs with custom ordering and icons
+- **Frontend-Only Plugins**: Create UI plugins without backend code
 - **Jira Integration**: Real-time issue tracking via plugin (JQL queries, status updates, comments)
 - **Modern UI**: Glass-morphism design with Tailwind CSS v4
 - **Async Architecture**: FastAPI backend with async/await patterns
@@ -43,8 +47,9 @@ This document serves as a comprehensive guide for AI assistants working on the S
 
 - Provide a minimal, fast, and extensible engineering dashboard
 - Enable AI-powered workflow automation
-- Support dynamic plugin loading without server restarts
+- Support dynamic plugin loading without modifying core code
 - Maintain clean separation between core and plugin functionality
+- Allow unlimited plugin extensibility via micro-portal pattern
 
 ---
 

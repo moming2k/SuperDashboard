@@ -1,0 +1,13 @@
+{
+  "name": "dashboard",
+  "displayName": "Dashboard",
+  "description": "Main dashboard with quick stats and overview",
+  "version": "1.0.0",
+  "tab": {
+    "label": "Dashboard",
+    "icon": "📊",
+    "order": 10,
+    "enabled": true
+  },
+  "frontendComponent": "Dashboard"
+}

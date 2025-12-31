@@ -1,6 +1,14 @@
 {
-    "name": "jira",
-    "displayName": "Jira Integration",
-    "replaces": "tasks",
-    "frontendComponent": "JiraTasks"
+  "name": "jira",
+  "displayName": "Jira Integration",
+  "description": "Jira Cloud integration with JQL sync and issue management",
+  "version": "1.0.0",
+  "tab": {
+    "label": "Jira Tasks",
+    "icon": "🏷️",
+    "order": 20,
+    "enabled": true
+  },
+  "replaces": "tasks",
+  "frontendComponent": "JiraTasks"
 }

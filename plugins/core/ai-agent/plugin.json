@@ -1,0 +1,14 @@
+{
+  "name": "ai-agent",
+  "displayName": "AI Virtual Assistant",
+  "description": "Chat with GPT-4 powered AI assistant",
+  "version": "1.0.0",
+  "tab": {
+    "label": "AI Agent",
+    "icon": "🤖",
+    "order": 30,
+    "enabled": true,
+    "id": "agent"
+  },
+  "frontendComponent": "AIAgent"
+}

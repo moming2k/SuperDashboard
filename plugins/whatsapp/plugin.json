@@ -3,5 +3,11 @@
   "displayName": "WhatsApp AI Agent",
   "description": "Twilio-powered WhatsApp integration with AI agent auto-responses",
   "version": "1.0.0",
+  "tab": {
+    "label": "WhatsApp AI",
+    "icon": "💬",
+    "order": 40,
+    "enabled": true
+  },
   "frontendComponent": "WhatsAppChat"
 }

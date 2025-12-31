@@ -91,35 +91,52 @@ async def analyze_tasks():
 # Plugin System
 PLUGINS_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "../plugins"))
 
+def load_plugin_from_path(plugin_path, plugin_name):
+    """Load a single plugin from a given path"""
+    # Check for legacy structure (main.py) or new structure (backend/main.py)
+    main_py = os.path.join(plugin_path, "main.py")
+    backend_main_py = os.path.join(plugin_path, "backend", "main.py")
+
+    target_path = None
+    if os.path.exists(backend_main_py):
+        target_path = backend_main_py
+    elif os.path.exists(main_py):
+        target_path = main_py
+
+    if target_path:
+        try:
+            spec = importlib.util.spec_from_file_location(f"plugins.{plugin_name}", target_path)
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+
+            if hasattr(module, "router"):
+                app.include_router(module.router, prefix=f"/plugins/{plugin_name}", tags=[plugin_name])
+                print(f"Loaded router for plugin: {plugin_name} from {target_path}")
+        except Exception as e:
+            print(f"Failed to load plugin {plugin_name}: {e}")
+
 def load_plugins():
     if not os.path.exists(PLUGINS_DIR):
         os.makedirs(PLUGINS_DIR, exist_ok=True)
         return
-    
+
+    # Load plugins from root plugins directory
     for item in os.listdir(PLUGINS_DIR):
         item_path = os.path.join(PLUGINS_DIR, item)
-        # Check for legacy structure (main.py) or new structure (backend/main.py)
-        main_py = os.path.join(item_path, "main.py")
-        backend_main_py = os.path.join(item_path, "backend", "main.py")
-        
-        target_path = None
-        if os.path.isdir(item_path):
-            if os.path.exists(backend_main_py):
-                target_path = backend_main_py
-            elif os.path.exists(main_py):
-                target_path = main_py
-                
-        if target_path:
-            try:
-                spec = importlib.util.spec_from_file_location(f"plugins.{item}", target_path)
-                module = importlib.util.module_from_spec(spec)
-                spec.loader.exec_module(module)
-                
-                if hasattr(module, "router"):
-                    app.include_router(module.router, prefix=f"/plugins/{item}", tags=[item])
-                    print(f"Loaded router for plugin: {item} from {target_path}")
-            except Exception as e:
-                print(f"Failed to load plugin {item}: {e}")
+        if not os.path.isdir(item_path):
+            continue
+
+        # Special handling for 'core' directory - load its subdirectories
+        if item == "core":
+            core_path = item_path
+            if os.path.exists(core_path):
+                for core_plugin in os.listdir(core_path):
+                    core_plugin_path = os.path.join(core_path, core_plugin)
+                    if os.path.isdir(core_plugin_path):
+                        load_plugin_from_path(core_plugin_path, core_plugin)
+        else:
+            # Load regular plugins
+            load_plugin_from_path(item_path, item)
 
 load_plugins()
 
@@ -127,24 +144,55 @@ load_plugins()
 async def list_plugins():
     import json
     plugins = []
+
+    def scan_plugin_directory(directory_path):
+        """Scan a directory for plugins and add them to the plugins list"""
+        for item in os.listdir(directory_path):
+            item_path = os.path.join(directory_path, item)
+            if not os.path.isdir(item_path):
+                continue
+
+            main_py = os.path.join(item_path, "main.py")
+            backend_main_py = os.path.join(item_path, "backend", "main.py")
+            manifest_path = os.path.join(item_path, "plugin.json")
+
+            # Include plugin if it has backend code OR manifest (for frontend-only plugins)
+            if os.path.exists(main_py) or os.path.exists(backend_main_py) or os.path.exists(manifest_path):
+                manifest = {}
+                if os.path.exists(manifest_path):
+                    try:
+                        with open(manifest_path, 'r') as f:
+                            manifest = json.load(f)
+                    except:
+                        pass
+                plugins.append({"name": item, "status": "active", "manifest": manifest})
+
+    # Scan root plugins directory
     for item in os.listdir(PLUGINS_DIR):
         item_path = os.path.join(PLUGINS_DIR, item)
         if not os.path.isdir(item_path):
             continue
 
-        main_py = os.path.join(item_path, "main.py")
-        backend_main_py = os.path.join(item_path, "backend", "main.py")
-        manifest_path = os.path.join(item_path, "plugin.json")
-        
-        if os.path.exists(main_py) or os.path.exists(backend_main_py):
-            manifest = {}
-            if os.path.exists(manifest_path):
-                try:
-                    with open(manifest_path, 'r') as f:
-                        manifest = json.load(f)
-                except:
-                    pass
-            plugins.append({"name": item, "status": "active", "manifest": manifest})
+        # Special handling for 'core' directory - scan its subdirectories
+        if item == "core":
+            scan_plugin_directory(item_path)
+        else:
+            # Check if it's a regular plugin
+            main_py = os.path.join(item_path, "main.py")
+            backend_main_py = os.path.join(item_path, "backend", "main.py")
+            manifest_path = os.path.join(item_path, "plugin.json")
+
+            # Include plugin if it has backend code OR manifest (for frontend-only plugins)
+            if os.path.exists(main_py) or os.path.exists(backend_main_py) or os.path.exists(manifest_path):
+                manifest = {}
+                if os.path.exists(manifest_path):
+                    try:
+                        with open(manifest_path, 'r') as f:
+                            manifest = json.load(f)
+                    except:
+                        pass
+                plugins.append({"name": item, "status": "active", "manifest": manifest})
+
     return plugins
 
 @app.get("/models")

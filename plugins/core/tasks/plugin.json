@@ -1,0 +1,13 @@
+{
+  "name": "tasks",
+  "displayName": "Tasks",
+  "description": "Simple task management system",
+  "version": "1.0.0",
+  "tab": {
+    "label": "Tasks",
+    "icon": "✅",
+    "order": 20,
+    "enabled": true
+  },
+  "frontendComponent": "Tasks"
+}
