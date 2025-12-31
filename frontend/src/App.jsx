@@ -47,13 +47,26 @@ const PluginComponent = ({ plugin, props }) => {
 };
 
 function App() {
-  const [activeTab, setActiveTab] = useState('dashboard');
+  // Get initial tab from URL hash (e.g., #dashboard, #jira, #plugins)
+  const getInitialTab = () => {
+    const hash = window.location.hash.slice(1); // Remove the '#'
+    // If no hash, default to 'dashboard' tab
+    return hash || 'dashboard';
+  };
+
+  const [activeTab, setActiveTab] = useState(getInitialTab());
   const [plugins, setPlugins] = useState([]);
   const [loading, setLoading] = useState(true);
   const [configModalOpen, setConfigModalOpen] = useState(false);
   const [selectedPlugin, setSelectedPlugin] = useState(null);
   const [pluginConfig, setPluginConfig] = useState({});
   const [toast, setToast] = useState(null);
+
+  // Custom setActiveTab that also updates URL
+  const navigateToTab = (tabId) => {
+    setActiveTab(tabId);
+    window.location.hash = tabId;
+  };
 
   const fetchPlugins = async () => {
     try {
@@ -136,13 +149,26 @@ function App() {
     // Listen for navigation events from plugins
     const handleNavigate = (e) => {
       if (e.detail?.tab) {
-        setActiveTab(e.detail.tab);
+        navigateToTab(e.detail.tab);
+      }
+    };
+
+    // Listen for hash changes (browser back/forward buttons)
+    const handleHashChange = () => {
+      const hash = window.location.hash.slice(1);
+      if (hash && hash !== activeTab) {
+        setActiveTab(hash);
       }
     };
 
     window.addEventListener('navigate-tab', handleNavigate);
-    return () => window.removeEventListener('navigate-tab', handleNavigate);
-  }, []);
+    window.addEventListener('hashchange', handleHashChange);
+
+    return () => {
+      window.removeEventListener('navigate-tab', handleNavigate);
+      window.removeEventListener('hashchange', handleHashChange);
+    };
+  }, [activeTab]);
 
   // Get all plugins with tabs enabled
   const getVisibleTabs = () => {
@@ -225,7 +251,7 @@ function App() {
                 ? 'bg-glass text-text-main translate-x-1'
                 : 'text-text-muted'
                 }`}
-              onClick={() => setActiveTab(tab.id)}
+              onClick={() => navigateToTab(tab.id)}
             >
               {tab.label}
             </div>
@@ -239,7 +265,7 @@ function App() {
               ? 'bg-glass text-text-main translate-x-1'
               : 'text-text-muted'
               }`}
-            onClick={() => setActiveTab('plugins')}
+            onClick={() => navigateToTab('plugins')}
           >
             🧩 Plugin Registry
           </div>
