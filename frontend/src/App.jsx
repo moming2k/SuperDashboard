@@ -209,6 +209,7 @@ function App() {
   };
 
   const tasksPlugin = getPluginForView('tasks');
+  const whatsappPlugin = plugins.find(p => p.name === 'whatsapp');
 
   return (
     <div className="flex h-screen bg-bg-dark font-outfit text-text-main">
@@ -222,8 +223,9 @@ function App() {
             { id: 'dashboard', label: '📊 Dashboard' },
             { id: 'tasks', label: tasksPlugin ? `🏷️ ${tasksPlugin.manifest.displayName || 'Tasks'}` : '✅ Tasks' },
             { id: 'agent', label: '🤖 AI Agent' },
+            { id: 'whatsapp', label: '💬 WhatsApp AI', condition: whatsappPlugin },
             { id: 'plugins', label: '🧩 Plugins' },
-          ].map((tab) => (
+          ].filter(tab => tab.condition !== false).map((tab) => (
             <div
               key={tab.id}
               className={`flex items-center gap-3 p-3 px-4 rounded-xl cursor-pointer transition-all duration-300 hover:bg-glass hover:text-text-main hover:translate-x-1 ${activeTab === tab.id ? 'bg-glass text-text-main translate-x-1' : 'text-text-muted'
@@ -372,6 +374,10 @@ function App() {
               <ChatInput onSend={sendMessage} isLoading={isLoading} />
             </div>
           </div>
+        )}
+
+        {activeTab === 'whatsapp' && whatsappPlugin && (
+          <PluginComponent plugin={whatsappPlugin} />
         )}
 
         {activeTab === 'plugins' && (

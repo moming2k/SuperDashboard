@@ -4,12 +4,19 @@ FROM python:3.11-bullseye
 # Avoid warnings by switching to noninteractive
 ENV DEBIAN_FRONTEND=noninteractive
 
-# Install Node.js 20.x
+# Install Node.js 20.x, GitHub CLI, and ngrok
 RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
+    && curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg \
+    && chmod go+r /usr/share/keyrings/githubcli-archive-keyring.gpg \
+    && echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | tee /etc/apt/sources.list.d/github-cli.list > /dev/null \
+    && curl -fsSL https://ngrok-agent.s3.amazonaws.com/ngrok.asc | tee /etc/apt/trusted.gpg.d/ngrok.asc >/dev/null \
+    && echo "deb https://ngrok-agent.s3.amazonaws.com buster main" | tee /etc/apt/sources.list.d/ngrok.list \
     && apt-get update \
     && apt-get install -y --no-install-recommends \
     nodejs \
     git \
+    gh \
+    ngrok \
     curl \
     wget \
     vim \
@@ -57,3 +64,6 @@ RUN curl -fsSL https://raw.githubusercontent.com/zdk/rm-safely/main/rm-safely | 
 
 # Ensure rm-safely hook is loaded in non-interactive shells
 RUN echo '[ -f "$HOME/.rm-safely" ] && source "$HOME/.rm-safely"' >> /home/vscode/.bashrc
+
+# Add claude command with dangerously-skip-permissions to bash history for quick access
+RUN echo "claude --dangerously-skip-permissions" >> /home/vscode/.bash_history

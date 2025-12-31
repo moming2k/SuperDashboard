@@ -8,4 +8,13 @@ export default defineConfig({
     react(),
     tailwindcss(),
   ],
+  resolve: {
+    preserveSymlinks: true,
+  },
+  server: {
+    fs: {
+      // Allow serving files from the plugins directory
+      allow: ['..'],
+    },
+  },
 })

@@ -57,22 +57,17 @@
     },
     // Use 'postCreateCommand' to run commands after the container is created.
     "postCreateCommand": "sudo chown -R vscode:vscode /workspace/frontend/node_modules /workspace/backend/venv && cd backend && pip install -r requirements.txt && cd ../frontend && npm install",
-    // Fix SSH and Claude permissions after container starts
-    "postStartCommand": "chmod 700 ~/.ssh 2>/dev/null || true && chmod 600 ~/.ssh/id_* 2>/dev/null || true && chmod 644 ~/.ssh/*.pub 2>/dev/null || true && chmod 700 ~/.claude 2>/dev/null || true && chmod 600 ~/.claude/.credentials.json 2>/dev/null || true",
+    // Fix SSH permissions and set up Claude directory after container starts
+    "postStartCommand": "chmod 700 ~/.ssh 2>/dev/null || true && chmod 600 ~/.ssh/id_* 2>/dev/null || true && chmod 644 ~/.ssh/*.pub 2>/dev/null || true && mkdir -p ~/.claude && cp ~/.claude-credentials.json ~/.claude/.credentials.json 2>/dev/null || true && chmod 700 ~/.claude && chmod 600 ~/.claude/.credentials.json 2>/dev/null || true",
     // Comment out to connect as root instead. More info: https://aka.ms/vscode-remote/containers/non-root.
     "remoteUser": "vscode",
     // Set environment variables
     "remoteEnv": {
         "PYTHONUNBUFFERED": "1"
     },
-    // Mount Claude Code configuration directory and SSH keys
+    // Mount SSH keys and Claude credentials
     "mounts": [
-        "source=${localEnv:HOME}/.claude,target=/home/vscode/.claude,type=bind,consistency=cached",
-        "source=${localEnv:HOME}/.ssh,target=/home/vscode/.ssh,type=bind,consistency=cached"
-    ],
-    // Features to add to the dev container
-    "features": {
-        "ghcr.io/devcontainers/features/git:1": {},
-        "ghcr.io/devcontainers/features/github-cli:1": {}
-    }
+        "source=${localEnv:HOME}/.ssh,target=/home/vscode/.ssh,type=bind,consistency=cached",
+        "source=${localEnv:HOME}/.claude/.credentials.json,target=/home/vscode/.claude-credentials.json,type=bind,consistency=cached"
+    ]
 }

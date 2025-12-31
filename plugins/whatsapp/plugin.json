@@ -1,6 +1,7 @@
 {
-    "name": "whatsapp",
-    "displayName": "WhatsApp Messages",
-    "replaces": "tasks",
-    "frontendComponent": "WhatsAppMessages"
+  "name": "whatsapp",
+  "displayName": "WhatsApp AI Agent",
+  "description": "Twilio-powered WhatsApp integration with AI agent auto-responses",
+  "version": "1.0.0",
+  "frontendComponent": "WhatsAppChat"
 }
