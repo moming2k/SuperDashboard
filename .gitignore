@@ -21,6 +21,9 @@ __pycache__/
 htmlcov/
 .mypy_cache/
 
+# Plugin state (runtime data)
+plugin_state.json
+
 # Node.js
 node_modules/
 npm-debug.log*

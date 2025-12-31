@@ -45,6 +45,86 @@ function App() {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [plugins, setPlugins] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [configModalOpen, setConfigModalOpen] = useState(false);
+  const [selectedPlugin, setSelectedPlugin] = useState(null);
+  const [pluginConfig, setPluginConfig] = useState({});
+
+  const fetchPlugins = async () => {
+    try {
+      const res = await fetch(`${API_BASE}/plugins`);
+      const data = await res.json();
+      setPlugins(data);
+      setLoading(false);
+    } catch (e) {
+      console.error("Failed to fetch plugins", e);
+      setLoading(false);
+    }
+  };
+
+  const togglePlugin = async (pluginName, currentEnabled) => {
+    try {
+      const res = await fetch(`${API_BASE}/plugins/${pluginName}/toggle`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ enabled: !currentEnabled })
+      });
+      const data = await res.json();
+
+      if (res.ok) {
+        // Update local state
+        setPlugins(plugins.map(p =>
+          p.name === pluginName ? { ...p, enabled: !currentEnabled, status: !currentEnabled ? 'enabled' : 'disabled' } : p
+        ));
+        // Show restart message
+        if (data.requiresRestart) {
+          alert('Plugin toggled successfully! Please restart the backend server for changes to take effect.');
+        }
+      } else {
+        alert(`Error: ${data.detail || 'Failed to toggle plugin'}`);
+      }
+    } catch (e) {
+      console.error("Failed to toggle plugin", e);
+      alert('Failed to toggle plugin');
+    }
+  };
+
+  const openConfigModal = async (plugin) => {
+    setSelectedPlugin(plugin);
+    try {
+      const res = await fetch(`${API_BASE}/plugins/${plugin.name}/config`);
+      const data = await res.json();
+      setPluginConfig(data.config || {});
+      setConfigModalOpen(true);
+    } catch (e) {
+      console.error("Failed to fetch plugin config", e);
+      setPluginConfig({});
+      setConfigModalOpen(true);
+    }
+  };
+
+  const savePluginConfig = async () => {
+    if (!selectedPlugin) return;
+
+    try {
+      const res = await fetch(`${API_BASE}/plugins/${selectedPlugin.name}/config`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ config: pluginConfig })
+      });
+
+      if (res.ok) {
+        alert('Plugin configuration saved successfully!');
+        setConfigModalOpen(false);
+        fetchPlugins(); // Refresh plugin list
+      } else {
+        const data = await res.json();
+        alert(`Error: ${data.detail || 'Failed to save config'}`);
+      }
+    } catch (e) {
+      console.error("Failed to save plugin config", e);
+      alert('Failed to save plugin configuration');
+    }
+  };
 
   useEffect(() => {
     fetchPlugins();
@@ -60,29 +140,20 @@ function App() {
     return () => window.removeEventListener('navigate-tab', handleNavigate);
   }, []);
 
-  const fetchPlugins = async () => {
-    try {
-      const res = await fetch(`${API_BASE}/plugins`);
-      const data = await res.json();
-      setPlugins(data);
-      setLoading(false);
-    } catch (e) {
-      console.error("Failed to fetch plugins", e);
-      setLoading(false);
-    }
-  };
-
   // Get all plugins with tabs enabled
   const getVisibleTabs = () => {
     if (!plugins || plugins.length === 0) return [];
 
-    // Find plugins that replace core views
+    // Find plugins that replace core views (only if enabled)
     const replacedViews = plugins
-      .filter(p => p.manifest?.replaces)
+      .filter(p => p.enabled && p.manifest?.replaces)
       .map(p => p.manifest.replaces);
 
     // Filter plugins with tabs enabled
     const visiblePlugins = plugins.filter(plugin => {
+      // Don't show disabled plugins
+      if (!plugin.enabled) return false;
+
       const manifest = plugin.manifest || {};
       const tab = manifest.tab || {};
 
@@ -184,17 +255,43 @@ function App() {
                 <div key={plugin.name} className="bg-bg-card backdrop-blur-xl border border-glass-border rounded-[24px] p-8 shadow-2xl transition-all hover:border-primary">
                   <div className="flex items-center gap-3 mb-4">
                     <span className="text-3xl">{plugin.manifest?.tab?.icon || '🧩'}</span>
-                    <div>
-                      <h3 className="text-xl font-bold">{plugin.manifest?.displayName || plugin.name}</h3>
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2">
+                        <h3 className="text-xl font-bold">{plugin.manifest?.displayName || plugin.name}</h3>
+                        {plugin.isCore && (
+                          <span className="text-xs bg-primary/20 text-primary px-2 py-0.5 rounded-full">CORE</span>
+                        )}
+                      </div>
                       <p className="text-text-muted text-xs">v{plugin.manifest?.version || '1.0.0'}</p>
                     </div>
                   </div>
                   {plugin.manifest?.description && (
                     <p className="text-text-muted text-sm mb-4">{plugin.manifest.description}</p>
                   )}
-                  <div className="flex items-center gap-2">
-                    <div className="w-2 h-2 rounded-full bg-green-400"></div>
+                  <div className="flex items-center gap-2 mb-4">
+                    <div className={`w-2 h-2 rounded-full ${plugin.enabled ? 'bg-green-400' : 'bg-gray-400'}`}></div>
                     <p className="text-text-muted text-sm uppercase tracking-wider">{plugin.status}</p>
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => togglePlugin(plugin.name, plugin.enabled)}
+                      disabled={plugin.isCore}
+                      className={`flex-1 p-2 px-4 rounded-xl font-semibold text-sm transition-all duration-300 ${
+                        plugin.isCore
+                          ? 'bg-gray-600/30 text-gray-500 cursor-not-allowed'
+                          : plugin.enabled
+                          ? 'bg-red-500/20 text-red-400 hover:bg-red-500/30 border border-red-500/30'
+                          : 'bg-green-500/20 text-green-400 hover:bg-green-500/30 border border-green-500/30'
+                      }`}
+                    >
+                      {plugin.enabled ? 'Disable' : 'Enable'}
+                    </button>
+                    <button
+                      onClick={() => openConfigModal(plugin)}
+                      className="p-2 px-4 rounded-xl font-semibold text-sm bg-primary/20 text-primary hover:bg-primary/30 border border-primary/30 transition-all duration-300"
+                    >
+                      ⚙️ Config
+                    </button>
                   </div>
                 </div>
               ))}
@@ -210,6 +307,54 @@ function App() {
               <div className="text-6xl mb-4">🔌</div>
               <h2 className="text-2xl font-bold mb-2">Tab Not Found</h2>
               <p className="text-text-muted">The requested tab "{activeTab}" is not available.</p>
+            </div>
+          </div>
+        )}
+
+        {/* Config Modal */}
+        {configModalOpen && (
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50" onClick={() => setConfigModalOpen(false)}>
+            <div className="bg-bg-card backdrop-blur-xl border border-glass-border rounded-[24px] p-8 shadow-2xl max-w-2xl w-full mx-4" onClick={(e) => e.stopPropagation()}>
+              <div className="flex items-center justify-between mb-6">
+                <h2 className="text-2xl font-bold">Configure {selectedPlugin?.manifest?.displayName || selectedPlugin?.name}</h2>
+                <button onClick={() => setConfigModalOpen(false)} className="text-text-muted hover:text-text-main transition-colors">
+                  ✕
+                </button>
+              </div>
+
+              <div className="mb-6">
+                <p className="text-text-muted text-sm mb-4">
+                  Configure plugin settings in JSON format. This configuration will be available to the plugin at runtime.
+                </p>
+                <textarea
+                  value={JSON.stringify(pluginConfig, null, 2)}
+                  onChange={(e) => {
+                    try {
+                      const parsed = JSON.parse(e.target.value);
+                      setPluginConfig(parsed);
+                    } catch {
+                      // Keep invalid JSON in state for user to fix
+                    }
+                  }}
+                  className="w-full h-64 bg-glass border border-glass-border rounded-xl p-4 text-text-main font-mono text-sm focus:outline-none focus:border-primary transition-colors"
+                  placeholder='{\n  "key": "value"\n}'
+                />
+              </div>
+
+              <div className="flex gap-3">
+                <button
+                  onClick={savePluginConfig}
+                  className="flex-1 bg-primary text-white p-3 px-6 rounded-xl font-semibold transition-all duration-300 hover:bg-primary/80"
+                >
+                  Save Configuration
+                </button>
+                <button
+                  onClick={() => setConfigModalOpen(false)}
+                  className="p-3 px-6 rounded-xl font-semibold bg-glass border border-glass-border text-text-muted hover:text-text-main transition-all duration-300"
+                >
+                  Cancel
+                </button>
+              </div>
             </div>
           </div>
         )}

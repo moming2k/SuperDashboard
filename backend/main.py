@@ -1,9 +1,11 @@
 import os
 import importlib.util
+import json
+from pathlib import Path
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 import openai
 from dotenv import load_dotenv
 
@@ -23,6 +25,62 @@ app.add_middleware(
 from openai import OpenAI
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
+# Plugin state management
+PLUGIN_STATE_FILE = os.path.join(os.path.dirname(__file__), "plugin_state.json")
+
+def load_plugin_state() -> Dict[str, Dict[str, Any]]:
+    """Load plugin state from JSON file"""
+    if os.path.exists(PLUGIN_STATE_FILE):
+        try:
+            with open(PLUGIN_STATE_FILE, 'r') as f:
+                return json.load(f)
+        except Exception as e:
+            print(f"Error loading plugin state: {e}")
+            return {}
+    return {}
+
+def save_plugin_state(state: Dict[str, Dict[str, Any]]):
+    """Save plugin state to JSON file"""
+    try:
+        with open(PLUGIN_STATE_FILE, 'w') as f:
+            json.dump(state, f, indent=2)
+    except Exception as e:
+        print(f"Error saving plugin state: {e}")
+
+def is_plugin_enabled(plugin_name: str, is_core: bool = False) -> bool:
+    """Check if a plugin is enabled. Core plugins are always enabled."""
+    if is_core:
+        return True
+
+    state = load_plugin_state()
+    plugin_state = state.get(plugin_name, {})
+    return plugin_state.get("enabled", True)  # Default to enabled
+
+def get_plugin_config(plugin_name: str) -> Dict[str, Any]:
+    """Get plugin configuration"""
+    state = load_plugin_state()
+    plugin_state = state.get(plugin_name, {})
+    return plugin_state.get("config", {})
+
+def set_plugin_enabled(plugin_name: str, enabled: bool, is_core: bool = False):
+    """Set plugin enabled state. Cannot disable core plugins."""
+    if is_core:
+        raise HTTPException(status_code=400, detail="Cannot disable core plugins")
+
+    state = load_plugin_state()
+    if plugin_name not in state:
+        state[plugin_name] = {}
+    state[plugin_name]["enabled"] = enabled
+    save_plugin_state(state)
+
+def set_plugin_config(plugin_name: str, config: Dict[str, Any]):
+    """Set plugin configuration"""
+    state = load_plugin_state()
+    if plugin_name not in state:
+        state[plugin_name] = {}
+    state[plugin_name]["config"] = config
+    save_plugin_state(state)
+
 class Task(BaseModel):
     id: Optional[str] = None
     title: str
@@ -38,6 +96,12 @@ class MCPServer(BaseModel):
 
 class MCPToggleRequest(BaseModel):
     enabled: bool
+
+class PluginToggleRequest(BaseModel):
+    enabled: bool
+
+class PluginConfigRequest(BaseModel):
+    config: Dict[str, Any]
 
 db_tasks = []
 mcp_servers = []
@@ -102,8 +166,13 @@ async def analyze_tasks():
 # Plugin System
 PLUGINS_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "../plugins"))
 
-def load_plugin_from_path(plugin_path, plugin_name):
+def load_plugin_from_path(plugin_path, plugin_name, is_core=False):
     """Load a single plugin from a given path"""
+    # Check if plugin is enabled
+    if not is_plugin_enabled(plugin_name, is_core):
+        print(f"Plugin {plugin_name} is disabled, skipping load")
+        return
+
     # Check for legacy structure (main.py) or new structure (backend/main.py)
     main_py = os.path.join(plugin_path, "main.py")
     backend_main_py = os.path.join(plugin_path, "backend", "main.py")
@@ -144,10 +213,10 @@ def load_plugins():
                 for core_plugin in os.listdir(core_path):
                     core_plugin_path = os.path.join(core_path, core_plugin)
                     if os.path.isdir(core_plugin_path):
-                        load_plugin_from_path(core_plugin_path, core_plugin)
+                        load_plugin_from_path(core_plugin_path, core_plugin, is_core=True)
         else:
             # Load regular plugins
-            load_plugin_from_path(item_path, item)
+            load_plugin_from_path(item_path, item, is_core=False)
 
 load_plugins()
 
@@ -156,7 +225,7 @@ async def list_plugins():
     import json
     plugins = []
 
-    def scan_plugin_directory(directory_path):
+    def scan_plugin_directory(directory_path, is_core=False):
         """Scan a directory for plugins and add them to the plugins list"""
         for item in os.listdir(directory_path):
             item_path = os.path.join(directory_path, item)
@@ -176,7 +245,19 @@ async def list_plugins():
                             manifest = json.load(f)
                     except:
                         pass
-                plugins.append({"name": item, "status": "active", "manifest": manifest})
+
+                enabled = is_plugin_enabled(item, is_core)
+                status = "enabled" if enabled else "disabled"
+                config = get_plugin_config(item)
+
+                plugins.append({
+                    "name": item,
+                    "status": status,
+                    "enabled": enabled,
+                    "isCore": is_core,
+                    "config": config,
+                    "manifest": manifest
+                })
 
     # Scan root plugins directory
     for item in os.listdir(PLUGINS_DIR):
@@ -186,7 +267,7 @@ async def list_plugins():
 
         # Special handling for 'core' directory - scan its subdirectories
         if item == "core":
-            scan_plugin_directory(item_path)
+            scan_plugin_directory(item_path, is_core=True)
         else:
             # Check if it's a regular plugin
             main_py = os.path.join(item_path, "main.py")
@@ -202,9 +283,79 @@ async def list_plugins():
                             manifest = json.load(f)
                     except:
                         pass
-                plugins.append({"name": item, "status": "active", "manifest": manifest})
+
+                enabled = is_plugin_enabled(item, False)
+                status = "enabled" if enabled else "disabled"
+                config = get_plugin_config(item)
+
+                plugins.append({
+                    "name": item,
+                    "status": status,
+                    "enabled": enabled,
+                    "isCore": False,
+                    "config": config,
+                    "manifest": manifest
+                })
 
     return plugins
+
+@app.put("/plugins/{plugin_name}/toggle")
+async def toggle_plugin(plugin_name: str, request: PluginToggleRequest):
+    """Toggle a plugin on/off. Core plugins cannot be disabled."""
+    # Check if plugin exists
+    plugin_path = os.path.join(PLUGINS_DIR, plugin_name)
+    core_plugin_path = os.path.join(PLUGINS_DIR, "core", plugin_name)
+
+    is_core = False
+    if os.path.exists(core_plugin_path):
+        is_core = True
+    elif not os.path.exists(plugin_path):
+        raise HTTPException(status_code=404, detail="Plugin not found")
+
+    try:
+        set_plugin_enabled(plugin_name, request.enabled, is_core)
+        status = "enabled" if request.enabled else "disabled"
+        return {
+            "message": f"Plugin {plugin_name} {status} successfully. Please restart the server for changes to take effect.",
+            "enabled": request.enabled,
+            "requiresRestart": True
+        }
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/plugins/{plugin_name}/config")
+async def get_plugin_configuration(plugin_name: str):
+    """Get plugin configuration"""
+    # Check if plugin exists
+    plugin_path = os.path.join(PLUGINS_DIR, plugin_name)
+    core_plugin_path = os.path.join(PLUGINS_DIR, "core", plugin_name)
+
+    if not os.path.exists(plugin_path) and not os.path.exists(core_plugin_path):
+        raise HTTPException(status_code=404, detail="Plugin not found")
+
+    config = get_plugin_config(plugin_name)
+    return {"config": config}
+
+@app.put("/plugins/{plugin_name}/config")
+async def update_plugin_configuration(plugin_name: str, request: PluginConfigRequest):
+    """Update plugin configuration"""
+    # Check if plugin exists
+    plugin_path = os.path.join(PLUGINS_DIR, plugin_name)
+    core_plugin_path = os.path.join(PLUGINS_DIR, "core", plugin_name)
+
+    if not os.path.exists(plugin_path) and not os.path.exists(core_plugin_path):
+        raise HTTPException(status_code=404, detail="Plugin not found")
+
+    try:
+        set_plugin_config(plugin_name, request.config)
+        return {
+            "message": f"Plugin {plugin_name} configuration updated successfully",
+            "config": request.config
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/models")
 async def list_models():
