@@ -30,7 +30,18 @@ class Task(BaseModel):
     status: str = "pending"
     assigned_to: Optional[str] = "user"
 
+class MCPServer(BaseModel):
+    name: str
+    url: str
+    apiKey: Optional[str] = None
+    status: str = "disconnected"
+
+class MCPToggleRequest(BaseModel):
+    enabled: bool
+
 db_tasks = []
+mcp_servers = []
+mcp_enabled = False
 
 @app.get("/")
 async def root():
@@ -225,9 +236,52 @@ async def list_models():
 async def mcp_status():
     """Get MCP server status"""
     return {
-        "enabled": False,
-        "servers": [],
-        "message": "MCP support is available but not configured. Add MCP server configuration to enable."
+        "enabled": mcp_enabled,
+        "servers": mcp_servers,
+        "message": f"MCP is {'enabled' if mcp_enabled else 'disabled'}. {len(mcp_servers)} server(s) configured."
+    }
+
+@app.post("/mcp/toggle")
+async def toggle_mcp(request: MCPToggleRequest):
+    """Toggle MCP enabled/disabled"""
+    global mcp_enabled
+    mcp_enabled = request.enabled
+    return {
+        "enabled": mcp_enabled,
+        "message": f"MCP {'enabled' if mcp_enabled else 'disabled'} successfully"
+    }
+
+@app.get("/mcp/servers")
+async def get_mcp_servers():
+    """Get list of configured MCP servers"""
+    return {
+        "servers": mcp_servers
+    }
+
+@app.post("/mcp/servers")
+async def add_mcp_server(server: MCPServer):
+    """Add a new MCP server"""
+    # Check if server with same name already exists
+    if any(s.name == server.name for s in mcp_servers):
+        raise HTTPException(status_code=400, detail="Server with this name already exists")
+
+    # Set initial status
+    server.status = "configured"
+    mcp_servers.append(server)
+
+    return {
+        "message": "MCP server added successfully",
+        "server": server
+    }
+
+@app.delete("/mcp/servers/{server_name}")
+async def remove_mcp_server(server_name: str):
+    """Remove an MCP server"""
+    global mcp_servers
+    mcp_servers = [s for s in mcp_servers if s.name != server_name]
+
+    return {
+        "message": f"MCP server '{server_name}' removed successfully"
     }
 
 if __name__ == "__main__":
