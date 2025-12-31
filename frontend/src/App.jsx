@@ -1,4 +1,5 @@
 import React, { useState, useEffect, Suspense, lazy } from 'react';
+import Toast from './components/Toast';
 
 const API_BASE = 'http://localhost:8000';
 
@@ -48,6 +49,7 @@ function App() {
   const [configModalOpen, setConfigModalOpen] = useState(false);
   const [selectedPlugin, setSelectedPlugin] = useState(null);
   const [pluginConfig, setPluginConfig] = useState({});
+  const [toast, setToast] = useState(null);
 
   const fetchPlugins = async () => {
     try {
@@ -75,16 +77,14 @@ function App() {
         setPlugins(plugins.map(p =>
           p.name === pluginName ? { ...p, enabled: !currentEnabled, status: !currentEnabled ? 'enabled' : 'disabled' } : p
         ));
-        // Show restart message
-        if (data.requiresRestart) {
-          alert('Plugin toggled successfully! Please restart the backend server for changes to take effect.');
-        }
+        // Show success message
+        setToast({ message: 'Plugin toggled successfully! Changes are reflected immediately in the UI.', type: 'success' });
       } else {
-        alert(`Error: ${data.detail || 'Failed to toggle plugin'}`);
+        setToast({ message: `Error: ${data.detail || 'Failed to toggle plugin'}`, type: 'error' });
       }
     } catch (e) {
       console.error("Failed to toggle plugin", e);
-      alert('Failed to toggle plugin');
+      setToast({ message: 'Failed to toggle plugin', type: 'error' });
     }
   };
 
@@ -113,16 +113,16 @@ function App() {
       });
 
       if (res.ok) {
-        alert('Plugin configuration saved successfully!');
+        setToast({ message: 'Plugin configuration saved successfully!', type: 'success' });
         setConfigModalOpen(false);
         fetchPlugins(); // Refresh plugin list
       } else {
         const data = await res.json();
-        alert(`Error: ${data.detail || 'Failed to save config'}`);
+        setToast({ message: `Error: ${data.detail || 'Failed to save config'}`, type: 'error' });
       }
     } catch (e) {
       console.error("Failed to save plugin config", e);
-      alert('Failed to save plugin configuration');
+      setToast({ message: 'Failed to save plugin configuration', type: 'error' });
     }
   };
 
@@ -217,11 +217,10 @@ function App() {
           {visibleTabs.map((tab) => (
             <div
               key={tab.id}
-              className={`flex items-center gap-3 p-3 px-4 rounded-xl cursor-pointer transition-all duration-300 hover:bg-glass hover:text-text-main hover:translate-x-1 ${
-                activeTab === tab.id
-                  ? 'bg-glass text-text-main translate-x-1'
-                  : 'text-text-muted'
-              }`}
+              className={`flex items-center gap-3 p-3 px-4 rounded-xl cursor-pointer transition-all duration-300 hover:bg-glass hover:text-text-main hover:translate-x-1 ${activeTab === tab.id
+                ? 'bg-glass text-text-main translate-x-1'
+                : 'text-text-muted'
+                }`}
               onClick={() => setActiveTab(tab.id)}
             >
               {tab.label}
@@ -232,11 +231,10 @@ function App() {
         {/* Plugin Registry Tab */}
         <div className="mt-auto">
           <div
-            className={`flex items-center gap-3 p-3 px-4 rounded-xl cursor-pointer transition-all duration-300 hover:bg-glass hover:text-text-main hover:translate-x-1 ${
-              activeTab === 'plugins'
-                ? 'bg-glass text-text-main translate-x-1'
-                : 'text-text-muted'
-            }`}
+            className={`flex items-center gap-3 p-3 px-4 rounded-xl cursor-pointer transition-all duration-300 hover:bg-glass hover:text-text-main hover:translate-x-1 ${activeTab === 'plugins'
+              ? 'bg-glass text-text-main translate-x-1'
+              : 'text-text-muted'
+              }`}
             onClick={() => setActiveTab('plugins')}
           >
             🧩 Plugin Registry
@@ -276,13 +274,12 @@ function App() {
                     <button
                       onClick={() => togglePlugin(plugin.name, plugin.enabled)}
                       disabled={plugin.isCore}
-                      className={`flex-1 p-2 px-4 rounded-xl font-semibold text-sm transition-all duration-300 ${
-                        plugin.isCore
-                          ? 'bg-gray-600/30 text-gray-500 cursor-not-allowed'
-                          : plugin.enabled
+                      className={`flex-1 p-2 px-4 rounded-xl font-semibold text-sm transition-all duration-300 ${plugin.isCore
+                        ? 'bg-gray-600/30 text-gray-500 cursor-not-allowed'
+                        : plugin.enabled
                           ? 'bg-red-500/20 text-red-400 hover:bg-red-500/30 border border-red-500/30'
                           : 'bg-green-500/20 text-green-400 hover:bg-green-500/30 border border-green-500/30'
-                      }`}
+                        }`}
                     >
                       {plugin.enabled ? 'Disable' : 'Enable'}
                     </button>
@@ -359,6 +356,15 @@ function App() {
           </div>
         )}
       </div>
+
+      {/* Toast Notification */}
+      {toast && (
+        <Toast
+          message={toast.message}
+          type={toast.type}
+          onClose={() => setToast(null)}
+        />
+      )}
     </div>
   );
 }
