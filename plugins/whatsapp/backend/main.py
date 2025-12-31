@@ -18,6 +18,9 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 # In-memory message storage (replace with database in production)
 message_history = []
 
+# Store conversation context per phone number for AI agent
+conversation_contexts = {}  # {phone_number: [{"role": "user", "content": "..."}, ...]}
+
 
 class WhatsAppMessage(BaseModel):
     id: Optional[str] = None

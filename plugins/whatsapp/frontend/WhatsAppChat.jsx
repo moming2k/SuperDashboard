@@ -1,6 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 
-const API_BASE = 'http://localhost:8000';
+// Detect if running in devcontainer and use appropriate backend port
+const isDevContainer = import.meta.env.VITE_DEVCONTAINER === 'true';
+const backendPort = isDevContainer ? 18010 : 8000;
+const API_BASE = `http://localhost:${backendPort}`;
 
 export default function WhatsAppChat() {
     const [conversations, setConversations] = useState([]);
