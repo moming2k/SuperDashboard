@@ -1,0 +1,16 @@
+{
+  "name": "rss-reader",
+  "displayName": "RSS Reader",
+  "description": "AI-powered RSS feed reader with automated daily fetching, article management, and intelligent Q&A",
+  "version": "1.0.0",
+  "tab": {
+    "label": "RSS Reader",
+    "icon": "📰",
+    "order": 50,
+    "enabled": true
+  },
+  "frontendComponent": "RSSReader",
+  "config": {
+    "instructions": "🛠️ Configuration Instructions\n\n1. The RSS Reader requires OpenAI API key for AI-powered Q&A features\n2. Add to your backend/.env file:\n   - OPENAI_API_KEY=sk-your_key_here\n\n3. Features:\n   - Add RSS feeds via the + Add Feed button\n   - Articles are fetched automatically when you add a feed\n   - Daily scheduler fetches new articles at 6 AM automatically\n   - Click any article to view it with AI-generated Q&A\n   - Ask follow-up questions about articles using AI\n\n4. Supported RSS feed formats:\n   - RSS 2.0\n   - Atom 1.0\n   - Most standard blog/news feeds\n\n5. Example RSS feeds to try:\n   - TechCrunch: https://techcrunch.com/feed/\n   - Hacker News: https://hnrss.org/frontpage\n   - NY Times Technology: https://rss.nytimes.com/services/xml/rss/nyt/Technology.xml\n\n6. The scheduler runs automatically and fetches all feeds daily\n7. Restart the backend server after updating .env"
+  }
+}
