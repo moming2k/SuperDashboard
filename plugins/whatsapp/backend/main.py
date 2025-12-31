@@ -131,23 +131,39 @@ async def whatsapp_webhook(
                 from twilio.rest import Client
                 client = Client(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
 
-                response_message = client.messages.create(
-                    from_=TWILIO_WHATSAPP_NUMBER,
-                    body=ai_response,
-                    to=From
-                )
+                # Split message if it's too long (Twilio sandbox limit is 1600 chars)
+                # Using 1500 to be safe and leave room for part indicators
+                message_chunks = split_message(ai_response, max_length=1500)
+                
+                for i, chunk in enumerate(message_chunks):
+                    # Add part indicator if message was split
+                    if len(message_chunks) > 1:
+                        chunk_with_indicator = f"[Part {i+1}/{len(message_chunks)}]\n\n{chunk}"
+                    else:
+                        chunk_with_indicator = chunk
+                    
+                    response_message = client.messages.create(
+                        from_=TWILIO_WHATSAPP_NUMBER,
+                        body=chunk_with_indicator,
+                        to=From
+                    )
 
-                # Store AI response
-                ai_msg = WhatsAppMessage(
-                    id=response_message.sid,
-                    from_number=TWILIO_WHATSAPP_NUMBER,
-                    to_number=From,
-                    body=ai_response,
-                    timestamp=datetime.now().isoformat(),
-                    direction="outbound",
-                    status=response_message.status
-                )
-                message_history.append(ai_msg)
+                    # Store AI response
+                    ai_msg = WhatsAppMessage(
+                        id=response_message.sid,
+                        from_number=TWILIO_WHATSAPP_NUMBER,
+                        to_number=From,
+                        body=chunk_with_indicator,
+                        timestamp=datetime.now().isoformat(),
+                        direction="outbound",
+                        status=response_message.status
+                    )
+                    message_history.append(ai_msg)
+                    
+                    # Small delay between messages to ensure order
+                    if i < len(message_chunks) - 1:
+                        import asyncio
+                        await asyncio.sleep(0.5)
 
             except Exception as e:
                 print(f"❌ ERROR processing with AI: {str(e)}")
@@ -158,6 +174,45 @@ async def whatsapp_webhook(
     except Exception as e:
         print(f"❌ ERROR in webhook: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+def split_message(text: str, max_length: int = 4000) -> list:
+    """Split long messages into chunks that fit WhatsApp's character limit"""
+    if len(text) <= max_length:
+        return [text]
+    
+    chunks = []
+    current_chunk = ""
+    
+    # Split by paragraphs first
+    paragraphs = text.split('\n\n')
+    
+    for para in paragraphs:
+        # If adding this paragraph would exceed limit, save current chunk
+        if len(current_chunk) + len(para) + 2 > max_length:
+            if current_chunk:
+                chunks.append(current_chunk.strip())
+                current_chunk = ""
+            
+            # If single paragraph is too long, split by sentences
+            if len(para) > max_length:
+                sentences = para.split('. ')
+                for sentence in sentences:
+                    if len(current_chunk) + len(sentence) + 2 > max_length:
+                        if current_chunk:
+                            chunks.append(current_chunk.strip())
+                        current_chunk = sentence + '. '
+                    else:
+                        current_chunk += sentence + '. '
+            else:
+                current_chunk = para + '\n\n'
+        else:
+            current_chunk += para + '\n\n'
+    
+    if current_chunk:
+        chunks.append(current_chunk.strip())
+    
+    return chunks
 
 
 async def process_with_ai(user_message: str) -> str:
@@ -172,11 +227,11 @@ async def process_with_ai(user_message: str) -> str:
             messages=[
                 {
                     "role": "system",
-                    "content": "You are a helpful AI assistant integrated with WhatsApp. Provide concise, friendly, and helpful responses. Keep your answers brief since they'll be sent via WhatsApp."
+                    "content": "You are a helpful AI assistant integrated with WhatsApp. Provide concise, friendly, and helpful responses. Keep your answers VERY brief (under 1000 characters) since they'll be sent via WhatsApp."
                 },
                 {"role": "user", "content": user_message}
             ],
-            max_tokens=500  # Keep responses reasonable for WhatsApp
+            max_tokens=300  # Keep responses short for Twilio sandbox (1600 char limit)
         )
 
         return response.choices[0].message.content
