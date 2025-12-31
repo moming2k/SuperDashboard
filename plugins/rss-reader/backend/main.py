@@ -25,6 +25,22 @@ article_qa_cache = {}  # Cache for generated Q&A: {article_id: [{q, a}, ...]}
 # Scheduler for daily RSS fetching
 scheduler = AsyncIOScheduler()
 
+# Initialize scheduler on module load
+def init_scheduler():
+    """Initialize scheduler with daily RSS fetch job"""
+    if not scheduler.running:
+        scheduler.add_job(
+            fetch_all_feeds,
+            CronTrigger(hour=6, minute=0),
+            id="daily_rss_fetch",
+            replace_existing=True
+        )
+        scheduler.start()
+        print("✅ RSS scheduler started - feeds will be fetched daily at 6 AM")
+
+# Start scheduler when module loads
+init_scheduler()
+
 
 class RSSFeed(BaseModel):
     id: Optional[str] = None
@@ -221,20 +237,6 @@ async def answer_question(article: Article, question: str) -> str:
     except Exception as e:
         print(f"❌ Error answering question: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to answer question: {str(e)}")
-
-
-@router.on_event("startup")
-async def startup_event():
-    """Initialize scheduler on startup"""
-    # Schedule daily RSS fetch at 6 AM
-    scheduler.add_job(
-        fetch_all_feeds,
-        CronTrigger(hour=6, minute=0),
-        id="daily_rss_fetch",
-        replace_existing=True
-    )
-    scheduler.start()
-    print("✅ RSS scheduler started - feeds will be fetched daily at 6 AM")
 
 
 @router.get("/feeds")

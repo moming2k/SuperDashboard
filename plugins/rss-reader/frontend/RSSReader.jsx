@@ -361,10 +361,14 @@ export default function RSSReader() {
                         <div className="flex-1 overflow-y-auto p-6 space-y-6">
                             {/* Article Content */}
                             <div className="prose prose-invert max-w-none">
-                                <div
-                                    dangerouslySetInnerHTML={{ __html: selectedArticle.content || selectedArticle.description }}
-                                    className="text-text-main leading-relaxed"
-                                />
+                                {(selectedArticle.content || selectedArticle.description) ? (
+                                    <div
+                                        dangerouslySetInnerHTML={{ __html: selectedArticle.content || selectedArticle.description }}
+                                        className="text-text-main leading-relaxed"
+                                    />
+                                ) : (
+                                    <p className="text-text-muted">No content available for this article.</p>
+                                )}
                             </div>
 
                             {/* Suggested Q&A */}
