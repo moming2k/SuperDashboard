@@ -437,4 +437,10 @@ async def remove_mcp_server(server_name: str):
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    # Detect if running in devcontainer
+    is_devcontainer = os.getenv("DEVCONTAINER", "false").lower() == "true"
+    # Use port 18010 in devcontainer, 8000 locally (can be overridden by PORT env var)
+    default_port = 18010 if is_devcontainer else 8000
+    port = int(os.getenv("PORT", default_port))
+    uvicorn.run(app, host="0.0.0.0", port=port)
+

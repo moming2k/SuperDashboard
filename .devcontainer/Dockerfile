@@ -20,6 +20,17 @@ RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
     curl \
     wget \
     vim \
+    jq \
+    lynx \
+    netcat \
+    telnet \
+    nmap \
+    traceroute \
+    dnsutils \
+    iputils-ping \
+    htop \
+    tree \
+    less \
     sudo \
     ca-certificates \
     && apt-get clean \

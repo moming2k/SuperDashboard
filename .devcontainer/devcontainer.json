@@ -42,15 +42,15 @@
     },
     // Use 'forwardPorts' to make a list of ports inside the container available locally.
     "forwardPorts": [
-        8000,
-        5173
+        18010,
+        15173
     ],
     "portsAttributes": {
-        "8000": {
+        "18010": {
             "label": "Backend API",
             "onAutoForward": "notify"
         },
-        "5173": {
+        "15173": {
             "label": "Frontend Dev Server",
             "onAutoForward": "notify"
         }

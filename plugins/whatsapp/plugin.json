@@ -9,5 +9,8 @@
     "order": 40,
     "enabled": true
   },
-  "frontendComponent": "WhatsAppChat"
+  "frontendComponent": "WhatsAppChat",
+  "config": {
+    "instructions": "🛠️ Configuration Instructions\n\n1. Sign up for Twilio at https://www.twilio.com/try-twilio\n2. Get your Account SID and Auth Token from the Twilio Console\n3. Set up WhatsApp Sandbox or get a WhatsApp-enabled number\n4. Add these to your backend/.env file:\n   - TWILIO_ACCOUNT_SID=your_account_sid\n   - TWILIO_AUTH_TOKEN=your_auth_token\n   - TWILIO_WHATSAPP_NUMBER=whatsapp:+14155238886 (sandbox) or your number\n   - OPENAI_API_KEY=your_openai_key (for AI responses)\n5. Configure webhook URL in Twilio Console:\n   - Webhook URL: https://your-domain.com/plugins/whatsapp/webhook\n   - Method: POST\n6. For local development, use ngrok to expose your local server\n7. Restart the backend server after updating .env"
+  }
 }

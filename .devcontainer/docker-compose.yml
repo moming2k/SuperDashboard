@@ -25,12 +25,14 @@ services:
 
     # Expose ports for backend and frontend
     ports:
-      - "8000:8000"
-      - "5173:5173"
+      - "18010:18010"
+      - "15173:15173"
 
     # Environment variables
     environment:
       - PYTHONUNBUFFERED=1
+      - DEVCONTAINER=true
+      - VITE_DEVCONTAINER=true
 
     # Load environment variables from .env file if it exists
     env_file:

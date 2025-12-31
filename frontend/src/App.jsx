@@ -1,7 +1,11 @@
 import React, { useState, useEffect, Suspense, lazy } from 'react';
 import Toast from './components/Toast';
 
-const API_BASE = 'http://localhost:8000';
+// Detect if running in devcontainer and use appropriate backend port
+const isDevContainer = import.meta.env.VITE_DEVCONTAINER === 'true';
+const backendPort = isDevContainer ? 18010 : 8000;
+const API_BASE = `http://localhost:${backendPort}`;
+
 
 const componentCache = {};
 
@@ -78,7 +82,7 @@ function App() {
           p.name === pluginName ? { ...p, enabled: !currentEnabled, status: !currentEnabled ? 'enabled' : 'disabled' } : p
         ));
         // Show success message
-        setToast({ message: 'Plugin toggled successfully! Changes are reflected immediately in the UI.', type: 'success' });
+        setToast({ message: 'Plugin toggled successfully!', type: 'success' });
       } else {
         setToast({ message: `Error: ${data.detail || 'Failed to toggle plugin'}`, type: 'error' });
       }
@@ -318,6 +322,16 @@ function App() {
                   ✕
                 </button>
               </div>
+
+
+              {/* Instructions Section */}
+              {selectedPlugin?.manifest?.config?.instructions && (
+                <div className="mb-6 bg-glass border border-glass-border rounded-xl p-6">
+                  <pre className="text-text-main text-sm whitespace-pre-wrap font-sans leading-relaxed">
+                    {selectedPlugin.manifest.config.instructions}
+                  </pre>
+                </div>
+              )}
 
               <div className="mb-6">
                 <p className="text-text-muted text-sm mb-4">

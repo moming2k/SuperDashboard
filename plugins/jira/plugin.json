@@ -6,8 +6,7 @@
   "tab": {
     "label": "Jira Tasks",
     "icon": "🏷️",
-    "order": 20,
-    "enabled": true
+    "order": 20
   },
   "replaces": "tasks",
   "frontendComponent": "JiraTasks"
