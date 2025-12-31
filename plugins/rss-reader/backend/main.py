@@ -28,15 +28,19 @@ scheduler = AsyncIOScheduler()
 # Initialize scheduler on module load
 def init_scheduler():
     """Initialize scheduler with daily RSS fetch job"""
-    if not scheduler.running:
-        scheduler.add_job(
-            fetch_all_feeds,
-            CronTrigger(hour=6, minute=0),
-            id="daily_rss_fetch",
-            replace_existing=True
-        )
-        scheduler.start()
-        print("✅ RSS scheduler started - feeds will be fetched daily at 6 AM")
+    try:
+        if not scheduler.running:
+            scheduler.add_job(
+                fetch_all_feeds,
+                CronTrigger(hour=6, minute=0),
+                id="daily_rss_fetch",
+                replace_existing=True
+            )
+            scheduler.start()
+            print("✅ RSS scheduler started - feeds will be fetched daily at 6 AM")
+    except Exception as e:
+        print(f"⚠️  Failed to start RSS scheduler: {e}")
+        print("   Scheduler will not run but plugin will still work")
 
 # Start scheduler when module loads
 init_scheduler()

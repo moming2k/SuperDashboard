@@ -36,10 +36,16 @@ export default function RSSReader() {
     const fetchFeeds = async () => {
         try {
             const res = await fetch(`${API_BASE}/plugins/rss-reader/feeds`);
+            if (!res.ok) {
+                console.error("Failed to fetch feeds:", res.status);
+                setFeeds([]);
+                return;
+            }
             const data = await res.json();
-            setFeeds(data);
+            setFeeds(Array.isArray(data) ? data : []);
         } catch (e) {
             console.error("Failed to fetch feeds", e);
+            setFeeds([]);
         }
     };
 
@@ -49,16 +55,26 @@ export default function RSSReader() {
                 ? `${API_BASE}/plugins/rss-reader/articles?feed_id=${selectedFeed}&limit=50`
                 : `${API_BASE}/plugins/rss-reader/articles?limit=50`;
             const res = await fetch(url);
+            if (!res.ok) {
+                console.error("Failed to fetch articles:", res.status);
+                setArticles([]);
+                return;
+            }
             const data = await res.json();
-            setArticles(data);
+            setArticles(Array.isArray(data) ? data : []);
         } catch (e) {
             console.error("Failed to fetch articles", e);
+            setArticles([]);
         }
     };
 
     const fetchStats = async () => {
         try {
             const res = await fetch(`${API_BASE}/plugins/rss-reader/stats`);
+            if (!res.ok) {
+                console.error("Failed to fetch stats:", res.status);
+                return;
+            }
             const data = await res.json();
             setStats(data);
         } catch (e) {
