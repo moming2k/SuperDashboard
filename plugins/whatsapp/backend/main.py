@@ -1,9 +1,27 @@
 import os
-from fastapi import APIRouter, HTTPException, Request, Form
+from fastapi import APIRouter, HTTPException, Request, Form, Depends
 from pydantic import BaseModel
 from typing import List, Optional
 from datetime import datetime
 from dotenv import load_dotenv
+from sqlalchemy.orm import Session
+from sqlalchemy import or_, and_, func
+import sys
+import os
+import importlib.util
+
+# Add paths for imports
+plugin_root = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
+sys.path.insert(0, plugin_root)
+
+from shared.database import get_db, init_db
+
+# Load WhatsApp models using importlib to avoid conflicts
+models_path = os.path.join(os.path.dirname(__file__), 'models.py')
+spec = importlib.util.spec_from_file_location("whatsapp_models", models_path)
+whatsapp_models = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(whatsapp_models)
+WhatsAppMessageModel = whatsapp_models.WhatsAppMessage
 
 load_dotenv()
 
@@ -15,11 +33,18 @@ TWILIO_AUTH_TOKEN = os.getenv("TWILIO_AUTH_TOKEN")
 TWILIO_WHATSAPP_NUMBER = os.getenv("TWILIO_WHATSAPP_NUMBER")  # Format: whatsapp:+1234567890
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
-# In-memory message storage (replace with database in production)
-message_history = []
+# Database availability flag
+database_available = False
 
-# Store conversation context per phone number for AI agent
-conversation_contexts = {}  # {phone_number: [{"role": "user", "content": "..."}, ...]}
+# Initialize database tables
+try:
+    init_db()
+    database_available = True
+    print("📱 WhatsApp database tables initialized")
+except Exception as e:
+    print(f"⚠️  WhatsApp database initialization error: {e}")
+    print("   Plugin will work with limited functionality (no message persistence)")
+
 
 
 class WhatsAppMessage(BaseModel):
@@ -55,7 +80,7 @@ async def health_check():
 
 
 @router.post("/send")
-async def send_whatsapp_message(request: SendMessageRequest):
+async def send_whatsapp_message(request: SendMessageRequest, db: Session = Depends(get_db)):
     """Send a WhatsApp message via Twilio"""
     if not all([TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_WHATSAPP_NUMBER]):
         raise HTTPException(
@@ -78,17 +103,18 @@ async def send_whatsapp_message(request: SendMessageRequest):
             to=to_number
         )
 
-        # Store in message history
-        msg = WhatsAppMessage(
+        # Store in database
+        msg = WhatsAppMessageModel(
             id=message.sid,
             from_number=TWILIO_WHATSAPP_NUMBER,
             to_number=to_number,
             body=request.body,
-            timestamp=datetime.now().isoformat(),
+            timestamp=datetime.utcnow(),
             direction="outbound",
             status=message.status
         )
-        message_history.append(msg)
+        db.add(msg)
+        db.commit()
 
         return {
             "success": True,
@@ -98,6 +124,7 @@ async def send_whatsapp_message(request: SendMessageRequest):
         }
 
     except Exception as e:
+        db.rollback()
         raise HTTPException(status_code=500, detail=f"Failed to send message: {str(e)}")
 
 
@@ -106,23 +133,25 @@ async def whatsapp_webhook(
     From: str = Form(...),
     Body: str = Form(...),
     MessageSid: str = Form(...),
-    To: str = Form(None)
+    To: str = Form(None),
+    db: Session = Depends(get_db)
 ):
     """Receive incoming WhatsApp messages from Twilio webhook"""
     try:
         print(f"📱 Incoming WhatsApp message from {From}: {Body}")
 
         # Store incoming message
-        msg = WhatsAppMessage(
+        msg = WhatsAppMessageModel(
             id=MessageSid,
             from_number=From,
             to_number=To or TWILIO_WHATSAPP_NUMBER,
             body=Body,
-            timestamp=datetime.now().isoformat(),
+            timestamp=datetime.utcnow(),
             direction="inbound",
             status="received"
         )
-        message_history.append(msg)
+        db.add(msg)
+        db.commit()
 
         # Process with AI agent if enabled
         if OPENAI_API_KEY:
@@ -134,14 +163,13 @@ async def whatsapp_webhook(
                 from twilio.rest import Client
                 client = Client(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
 
-                # Split message if it's too long (Twilio sandbox limit is 1600 chars)
-                # Using 1500 to be safe and leave room for part indicators
+                # Split message if it's too long
                 message_chunks = split_message(ai_response, max_length=1500)
                 
                 for i, chunk in enumerate(message_chunks):
                     # Add part indicator if message was split
                     if len(message_chunks) > 1:
-                        chunk_with_indicator = f"[Part {i+1}/{len(message_chunks)}]\n\n{chunk}"
+                        chunk_with_indicator = f"[Part {i+1}/{len(message_chunks)}]\\n\\n{chunk}"
                     else:
                         chunk_with_indicator = chunk
                     
@@ -151,31 +179,35 @@ async def whatsapp_webhook(
                         to=From
                     )
 
-                    # Store AI response
-                    ai_msg = WhatsAppMessage(
+                    # Store AI response in database
+                    ai_msg = WhatsAppMessageModel(
                         id=response_message.sid,
                         from_number=TWILIO_WHATSAPP_NUMBER,
                         to_number=From,
                         body=chunk_with_indicator,
-                        timestamp=datetime.now().isoformat(),
+                        timestamp=datetime.utcnow(),
                         direction="outbound",
                         status=response_message.status
                     )
-                    message_history.append(ai_msg)
+                    db.add(ai_msg)
                     
                     # Small delay between messages to ensure order
                     if i < len(message_chunks) - 1:
                         import asyncio
                         await asyncio.sleep(0.5)
 
+                db.commit()
+
             except Exception as e:
                 print(f"❌ ERROR processing with AI: {str(e)}")
+                db.rollback()
 
-        # Return empty response (Twilio doesn't need TwiML for this)
+        # Return empty response
         return {"status": "received"}
 
     except Exception as e:
         print(f"❌ ERROR in webhook: {str(e)}")
+        db.rollback()
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -188,7 +220,7 @@ def split_message(text: str, max_length: int = 4000) -> list:
     current_chunk = ""
     
     # Split by paragraphs first
-    paragraphs = text.split('\n\n')
+    paragraphs = text.split('\\n\\n')
     
     for para in paragraphs:
         # If adding this paragraph would exceed limit, save current chunk
@@ -208,9 +240,9 @@ def split_message(text: str, max_length: int = 4000) -> list:
                     else:
                         current_chunk += sentence + '. '
             else:
-                current_chunk = para + '\n\n'
+                current_chunk = para + '\\n\\n'
         else:
-            current_chunk += para + '\n\n'
+            current_chunk += para + '\\n\\n'
     
     if current_chunk:
         chunks.append(current_chunk.strip())
@@ -234,7 +266,7 @@ async def process_with_ai(user_message: str) -> str:
                 },
                 {"role": "user", "content": user_message}
             ],
-            max_tokens=300  # Keep responses short for Twilio sandbox (1600 char limit)
+            max_tokens=300
         )
 
         return response.choices[0].message.content
@@ -244,27 +276,33 @@ async def process_with_ai(user_message: str) -> str:
 
 
 @router.get("/messages")
-async def get_messages(phone_number: Optional[str] = None, limit: int = 100):
+async def get_messages(phone_number: Optional[str] = None, limit: int = 100, db: Session = Depends(get_db)):
     """Get message history, optionally filtered by phone number"""
+    query = db.query(WhatsAppMessageModel)
+    
     if phone_number:
         # Format phone number for filtering
         formatted_phone = f"whatsapp:+{phone_number}" if not phone_number.startswith("whatsapp:") else phone_number
-
-        filtered_messages = [
-            msg for msg in message_history
-            if msg.from_number == formatted_phone or msg.to_number == formatted_phone
-        ]
-        return filtered_messages[-limit:]
-
-    return message_history[-limit:]
+        query = query.filter(
+            or_(
+                WhatsAppMessageModel.from_number == formatted_phone,
+                WhatsAppMessageModel.to_number == formatted_phone
+            )
+        )
+    
+    messages = query.order_by(WhatsAppMessageModel.timestamp.desc()).limit(limit).all()
+    return [msg.to_dict() for msg in reversed(messages)]
 
 
 @router.get("/conversations")
-async def get_conversations():
+async def get_conversations(db: Session = Depends(get_db)):
     """Get list of unique conversations with metadata"""
+    # Get all messages
+    messages = db.query(WhatsAppMessageModel).order_by(WhatsAppMessageModel.timestamp.desc()).all()
+    
     conversations = {}
 
-    for msg in message_history:
+    for msg in messages:
         # Determine the other party (not our WhatsApp number)
         other_party = msg.from_number if msg.from_number != TWILIO_WHATSAPP_NUMBER else msg.to_number
 
@@ -284,14 +322,14 @@ async def get_conversations():
     # Format conversations for frontend
     result = []
     for phone, data in conversations.items():
-        messages = data["messages"]
-        latest_message = max(messages, key=lambda m: m.timestamp)
+        messages_list = data["messages"]
+        latest_message = max(messages_list, key=lambda m: m.timestamp)
 
         result.append({
             "phone_number": phone.replace("whatsapp:+", "").replace("whatsapp:", ""),
             "last_message": latest_message.body,
-            "last_message_time": latest_message.timestamp,
-            "message_count": len(messages),
+            "last_message_time": latest_message.timestamp.isoformat() if isinstance(latest_message.timestamp, datetime) else latest_message.timestamp,
+            "message_count": len(messages_list),
             "unread_count": data["unread_count"]
         })
 
@@ -328,11 +366,15 @@ async def chat_with_ai(messages: List[ChatMessage]):
 
 
 @router.delete("/messages")
-async def clear_messages():
+async def clear_messages(db: Session = Depends(get_db)):
     """Clear message history"""
-    global message_history
-    message_history = []
-    return {"status": "cleared", "message": "All messages have been cleared"}
+    try:
+        db.query(WhatsAppMessageModel).delete()
+        db.commit()
+        return {"status": "cleared", "message": "All messages have been cleared"}
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to clear messages: {str(e)}")
 
 
 @router.get("/config-instructions")

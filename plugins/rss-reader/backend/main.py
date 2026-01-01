@@ -1,6 +1,6 @@
 import os
 import feedparser
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 from typing import List, Optional
 from datetime import datetime, timedelta
@@ -9,6 +9,19 @@ import asyncio
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 import hashlib
+import httpx
+from bs4 import BeautifulSoup
+from urllib.parse import urljoin, urlparse
+from sqlalchemy.orm import Session
+import sys
+import os
+
+# Add the plugin directory to the path for imports
+sys.path.insert(0, os.path.dirname(__file__))
+
+# Import database and models
+from database import get_db, init_db
+from models import Feed as FeedModel, Article as ArticleModel
 
 load_dotenv()
 
@@ -17,10 +30,21 @@ router = APIRouter()
 # OpenAI configuration
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
-# In-memory storage (replace with database in production)
-rss_feeds = []  # List of RSS feed URLs
-articles = []  # List of articles from all feeds
-article_qa_cache = {}  # Cache for generated Q&A: {article_id: [{q, a}, ...]}
+# Database availability flag
+database_available = False
+
+# Initialize database tables
+try:
+    init_db()
+    database_available = True
+    print("📚 Database initialized successfully")
+except Exception as e:
+    print(f"⚠️  Database initialization error: {e}")
+    print("   Plugin will work with limited functionality (no persistence)")
+
+
+# Cache for generated Q&A: {article_id: [{q, a}, ...]}
+article_qa_cache = {}
 
 # Scheduler for daily RSS fetching
 scheduler = AsyncIOScheduler()
@@ -51,7 +75,7 @@ class RSSFeed(BaseModel):
     url: str
     title: Optional[str] = None
     description: Optional[str] = None
-    added_at: str
+    added_at: Optional[str] = None
     last_fetched: Optional[str] = None
     article_count: int = 0
 
@@ -82,8 +106,53 @@ def generate_id(text: str) -> str:
     return hashlib.md5(text.encode()).hexdigest()[:12]
 
 
-async def fetch_rss_feed(feed_url: str) -> List[Article]:
-    """Fetch articles from an RSS feed"""
+async def discover_rss_feed(url: str) -> Optional[str]:
+    """Auto-discover RSS feed URL from a website"""
+    try:
+        print(f"🔍 Attempting to discover RSS feed from: {url}")
+        
+        async with httpx.AsyncClient(timeout=10.0, follow_redirects=True) as client:
+            response = await client.get(url)
+            response.raise_for_status()
+            
+        soup = BeautifulSoup(response.text, 'lxml')
+        
+        # Look for RSS/Atom feed links in <link> tags
+        feed_links = soup.find_all('link', type=['application/rss+xml', 'application/atom+xml'])
+        
+        if feed_links:
+            # Get the first RSS feed link
+            feed_url = feed_links[0].get('href')
+            if feed_url:
+                # Convert relative URLs to absolute
+                absolute_url = urljoin(url, feed_url)
+                print(f"✅ Discovered RSS feed: {absolute_url}")
+                return absolute_url
+        
+        # Fallback: Look for common RSS feed URLs
+        common_paths = ['/feed', '/rss', '/feed.xml', '/rss.xml', '/atom.xml', '/index.xml']
+        base_url = f"{urlparse(url).scheme}://{urlparse(url).netloc}"
+        
+        for path in common_paths:
+            try:
+                test_url = urljoin(base_url, path)
+                parsed = feedparser.parse(test_url)
+                if parsed.entries:
+                    print(f"✅ Found RSS feed at common path: {test_url}")
+                    return test_url
+            except:
+                continue
+        
+        print(f"❌ No RSS feed found for {url}")
+        return None
+        
+    except Exception as e:
+        print(f"⚠️  Error during RSS discovery: {str(e)}")
+        return None
+
+
+async def fetch_rss_feed(feed_url: str, db: Session) -> List[Article]:
+    """Fetch articles from an RSS feed and save to database"""
     try:
         print(f"📡 Fetching RSS feed: {feed_url}")
         feed = feedparser.parse(feed_url)
@@ -98,8 +167,9 @@ async def fetch_rss_feed(feed_url: str) -> List[Article]:
             # Generate unique article ID from link
             article_id = generate_id(entry.get('link', ''))
 
-            # Skip if article already exists
-            if any(a.id == article_id for a in articles):
+            # Skip if article already exists in database
+            existing = db.query(ArticleModel).filter(ArticleModel.id == article_id).first()
+            if existing:
                 continue
 
             # Extract content (prefer content over summary)
@@ -109,43 +179,58 @@ async def fetch_rss_feed(feed_url: str) -> List[Article]:
             elif hasattr(entry, 'summary'):
                 content = entry.summary
 
-            article = Article(
+            # Parse published date
+            published = None
+            if entry.get('published'):
+                try:
+                    from dateutil import parser as date_parser
+                    published = date_parser.parse(entry.get('published'))
+                except:
+                    pass
+
+            article = ArticleModel(
                 id=article_id,
                 feed_id=feed_id,
                 title=entry.get('title', 'No Title'),
                 link=entry.get('link', ''),
                 description=entry.get('summary', '')[:500] if entry.get('summary') else None,
                 content=content,
-                published=entry.get('published', entry.get('updated', None)),
+                published=published,
                 author=entry.get('author', None),
-                fetched_at=datetime.now().isoformat()
+                fetched_at=datetime.utcnow()
             )
 
+            db.add(article)
             new_articles.append(article)
-            articles.append(article)
 
+        db.commit()
         print(f"✅ Fetched {len(new_articles)} new articles from {feed_url}")
         return new_articles
 
     except Exception as e:
         print(f"❌ Error fetching RSS feed {feed_url}: {str(e)}")
+        db.rollback()
         raise HTTPException(status_code=500, detail=f"Failed to fetch RSS feed: {str(e)}")
 
 
 async def fetch_all_feeds():
     """Fetch articles from all RSS feeds (scheduled task)"""
     print("🔄 Running scheduled RSS fetch for all feeds...")
-    for feed in rss_feeds:
-        try:
-            await fetch_rss_feed(feed['url'])
-            # Update last_fetched timestamp
-            for f in rss_feeds:
-                if f['id'] == feed['id']:
-                    f['last_fetched'] = datetime.now().isoformat()
-                    f['article_count'] = len([a for a in articles if a.feed_id == feed['id']])
-        except Exception as e:
-            print(f"❌ Error in scheduled fetch for {feed['url']}: {str(e)}")
-    print("✅ Scheduled RSS fetch completed")
+    db = next(get_db())
+    try:
+        feeds = db.query(FeedModel).all()
+        for feed in feeds:
+            try:
+                await fetch_rss_feed(feed.url, db)
+                # Update last_fetched timestamp
+                feed.last_fetched = datetime.utcnow()
+                feed.article_count = db.query(ArticleModel).filter(ArticleModel.feed_id == feed.id).count()
+                db.commit()
+            except Exception as e:
+                print(f"❌ Error in scheduled fetch for {feed.url}: {str(e)}")
+        print("✅ Scheduled RSS fetch completed")
+    finally:
+        db.close()
 
 
 async def generate_article_qa(article: Article, num_questions: int = 5) -> List[QAPair]:
@@ -159,7 +244,7 @@ async def generate_article_qa(article: Article, num_questions: int = 5) -> List[
         client = OpenAI(api_key=OPENAI_API_KEY)
 
         # Prepare article content
-        article_text = f"Title: {article.title}\n\n"
+        article_text = f"Title: {article.title}\\n\\n"
         if article.content:
             article_text += f"Content: {article.content[:3000]}"  # Limit to avoid token limits
         elif article.description:
@@ -220,7 +305,7 @@ async def answer_question(article: Article, question: str) -> str:
         client = OpenAI(api_key=OPENAI_API_KEY)
 
         # Prepare article content
-        article_text = f"Title: {article.title}\n\n"
+        article_text = f"Title: {article.title}\\n\\n"
         if article.content:
             article_text += f"Content: {article.content[:3000]}"
         elif article.description:
@@ -230,7 +315,7 @@ async def answer_question(article: Article, question: str) -> str:
             model="gpt-4",
             messages=[
                 {"role": "system", "content": "You are a helpful assistant that answers questions about articles. Base your answers on the article content provided."},
-                {"role": "user", "content": f"Article:\n{article_text}\n\nQuestion: {question}"}
+                {"role": "user", "content": f"Article:\\n{article_text}\\n\\nQuestion: {question}"}
             ],
             temperature=0.7,
             max_tokens=500
@@ -244,131 +329,154 @@ async def answer_question(article: Article, question: str) -> str:
 
 
 @router.get("/feeds")
-async def get_feeds():
+async def get_feeds(db: Session = Depends(get_db)):
     """Get all RSS feeds"""
-    return rss_feeds
+    if not database_available:
+        raise HTTPException(
+            status_code=503,
+            detail="Database not available. Please use devcontainer or set up PostgreSQL locally."
+        )
+    feeds = db.query(FeedModel).all()
+    return [feed.to_dict() for feed in feeds]
+
 
 
 @router.post("/feeds")
-async def add_feed(feed: RSSFeed):
+async def add_feed(feed: RSSFeed, db: Session = Depends(get_db)):
     """Add a new RSS feed and fetch initial articles"""
-    # Generate ID from URL
-    feed_id = generate_id(feed.url)
-
-    # Check if feed already exists
-    if any(f['id'] == feed_id for f in rss_feeds):
-        raise HTTPException(status_code=400, detail="Feed already exists")
-
+    feed_url = feed.url
+    
     # Try to fetch the feed to validate it
     try:
-        parsed_feed = feedparser.parse(feed.url)
+        parsed_feed = feedparser.parse(feed_url)
+        
+        # If the URL is not a valid RSS feed, try to discover it
         if parsed_feed.bozo and not parsed_feed.entries:
-            raise HTTPException(status_code=400, detail="Invalid RSS feed URL")
+            print(f"⚠️  URL is not a direct RSS feed, attempting auto-discovery...")
+            discovered_url = await discover_rss_feed(feed_url)
+            
+            if discovered_url:
+                feed_url = discovered_url
+                parsed_feed = feedparser.parse(feed_url)
+                
+                if parsed_feed.bozo and not parsed_feed.entries:
+                    raise HTTPException(status_code=400, detail="Discovered feed is invalid")
+            else:
+                raise HTTPException(status_code=400, detail="Invalid RSS feed URL and no feed could be discovered")
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Failed to parse RSS feed: {str(e)}")
+    
+    # Generate ID from the final feed URL (might be discovered URL)
+    feed_id = generate_id(feed_url)
 
-    # Create feed object
-    new_feed = {
-        "id": feed_id,
-        "url": feed.url,
-        "title": parsed_feed.feed.get('title', feed.url),
-        "description": parsed_feed.feed.get('description', ''),
-        "added_at": datetime.now().isoformat(),
-        "last_fetched": None,
-        "article_count": 0
-    }
+    # Check if feed already exists
+    existing_feed = db.query(FeedModel).filter(FeedModel.id == feed_id).first()
+    if existing_feed:
+        raise HTTPException(status_code=400, detail="Feed already exists")
 
-    rss_feeds.append(new_feed)
+    # Create feed object (use the final feed_url which might be discovered)
+    new_feed = FeedModel(
+        id=feed_id,
+        url=feed_url,
+        title=parsed_feed.feed.get('title', feed_url),
+        description=parsed_feed.feed.get('description', ''),
+        added_at=datetime.utcnow(),
+        last_fetched=None,
+        article_count=0
+    )
 
-    # Fetch articles from the new feed
-    await fetch_rss_feed(feed.url)
+    db.add(new_feed)
+    db.commit()
+
+    # Fetch articles from the new feed (use discovered URL)
+    await fetch_rss_feed(feed_url, db)
 
     # Update article count
-    new_feed['last_fetched'] = datetime.now().isoformat()
-    new_feed['article_count'] = len([a for a in articles if a.feed_id == feed_id])
+    new_feed.last_fetched = datetime.utcnow()
+    new_feed.article_count = db.query(ArticleModel).filter(ArticleModel.feed_id == feed_id).count()
+    db.commit()
+    db.refresh(new_feed)
 
-    return new_feed
+    return new_feed.to_dict()
 
 
 @router.delete("/feeds/{feed_id}")
-async def delete_feed(feed_id: str):
+async def delete_feed(feed_id: str, db: Session = Depends(get_db)):
     """Delete an RSS feed and its articles"""
-    global rss_feeds, articles
-
     # Find and remove feed
-    feed = next((f for f in rss_feeds if f['id'] == feed_id), None)
+    feed = db.query(FeedModel).filter(FeedModel.id == feed_id).first()
     if not feed:
         raise HTTPException(status_code=404, detail="Feed not found")
 
-    rss_feeds = [f for f in rss_feeds if f['id'] != feed_id]
+    db.delete(feed)  # Articles will be cascade deleted
+    db.commit()
 
-    # Remove articles from this feed
-    articles = [a for a in articles if a.feed_id != feed_id]
-
-    # Remove Q&A cache for articles from this feed
-    article_qa_cache.clear()  # Simple clear for now
+    # Clear Q&A cache
+    article_qa_cache.clear()
 
     return {"message": "Feed deleted successfully", "feed_id": feed_id}
 
 
 @router.post("/feeds/{feed_id}/refresh")
-async def refresh_feed(feed_id: str):
+async def refresh_feed(feed_id: str, db: Session = Depends(get_db)):
     """Manually refresh a specific feed"""
-    feed = next((f for f in rss_feeds if f['id'] == feed_id), None)
+    feed = db.query(FeedModel).filter(FeedModel.id == feed_id).first()
     if not feed:
         raise HTTPException(status_code=404, detail="Feed not found")
 
-    new_articles = await fetch_rss_feed(feed['url'])
+    new_articles = await fetch_rss_feed(feed.url, db)
 
     # Update last_fetched and article_count
-    feed['last_fetched'] = datetime.now().isoformat()
-    feed['article_count'] = len([a for a in articles if a.feed_id == feed_id])
+    feed.last_fetched = datetime.utcnow()
+    feed.article_count = db.query(ArticleModel).filter(ArticleModel.feed_id == feed_id).count()
+    db.commit()
 
     return {
         "message": "Feed refreshed successfully",
         "new_articles": len(new_articles),
-        "total_articles": feed['article_count']
+        "total_articles": feed.article_count
     }
 
 
 @router.get("/articles")
-async def get_articles(feed_id: Optional[str] = None, limit: int = 50):
+async def get_articles(feed_id: Optional[str] = None, limit: int = 50, db: Session = Depends(get_db)):
     """Get articles, optionally filtered by feed_id"""
-    filtered_articles = articles
-
+    query = db.query(ArticleModel)
+    
     if feed_id:
-        filtered_articles = [a for a in articles if a.feed_id == feed_id]
-
+        query = query.filter(ArticleModel.feed_id == feed_id)
+    
     # Sort by fetched_at (most recent first)
-    sorted_articles = sorted(
-        filtered_articles,
-        key=lambda a: a.fetched_at,
-        reverse=True
-    )
-
-    return sorted_articles[:limit]
+    articles = query.order_by(ArticleModel.fetched_at.desc()).limit(limit).all()
+    
+    return [article.to_dict() for article in articles]
 
 
 @router.get("/articles/{article_id}")
-async def get_article(article_id: str):
+async def get_article(article_id: str, db: Session = Depends(get_db)):
     """Get a specific article"""
-    article = next((a for a in articles if a.id == article_id), None)
+    article = db.query(ArticleModel).filter(ArticleModel.id == article_id).first()
     if not article:
         raise HTTPException(status_code=404, detail="Article not found")
 
-    return article
+    return article.to_dict()
 
 
 @router.get("/articles/{article_id}/qa")
-async def get_article_qa(article_id: str, regenerate: bool = False):
+async def get_article_qa(article_id: str, regenerate: bool = False, db: Session = Depends(get_db)):
     """Get or generate suggested Q&A for an article"""
-    article = next((a for a in articles if a.id == article_id), None)
-    if not article:
+    article_model = db.query(ArticleModel).filter(ArticleModel.id == article_id).first()
+    if not article_model:
         raise HTTPException(status_code=404, detail="Article not found")
 
     # Check cache
     if article_id in article_qa_cache and not regenerate:
         return article_qa_cache[article_id]
+
+    # Convert to Pydantic model for AI processing
+    article = Article(**article_model.to_dict())
 
     # Generate Q&A
     qa_pairs = await generate_article_qa(article)
@@ -380,11 +488,14 @@ async def get_article_qa(article_id: str, regenerate: bool = False):
 
 
 @router.post("/articles/{article_id}/question")
-async def ask_question(article_id: str, request: QuestionRequest):
+async def ask_question(article_id: str, request: QuestionRequest, db: Session = Depends(get_db)):
     """Ask a follow-up question about an article"""
-    article = next((a for a in articles if a.id == article_id), None)
-    if not article:
+    article_model = db.query(ArticleModel).filter(ArticleModel.id == article_id).first()
+    if not article_model:
         raise HTTPException(status_code=404, detail="Article not found")
+
+    # Convert to Pydantic model for AI processing
+    article = Article(**article_model.to_dict())
 
     answer = await answer_question(article, request.question)
 
@@ -395,14 +506,20 @@ async def ask_question(article_id: str, request: QuestionRequest):
 
 
 @router.get("/stats")
-async def get_stats():
+async def get_stats(db: Session = Depends(get_db)):
     """Get RSS reader statistics"""
+    total_feeds = db.query(FeedModel).count()
+    total_articles = db.query(ArticleModel).count()
+    
+    feeds = db.query(FeedModel).all()
+    articles_by_feed = {}
+    for feed in feeds:
+        count = db.query(ArticleModel).filter(ArticleModel.feed_id == feed.id).count()
+        articles_by_feed[feed.title] = count
+    
     return {
-        "total_feeds": len(rss_feeds),
-        "total_articles": len(articles),
-        "articles_by_feed": {
-            feed['title']: len([a for a in articles if a.feed_id == feed['id']])
-            for feed in rss_feeds
-        },
+        "total_feeds": total_feeds,
+        "total_articles": total_articles,
+        "articles_by_feed": articles_by_feed,
         "scheduler_running": scheduler.running
     }

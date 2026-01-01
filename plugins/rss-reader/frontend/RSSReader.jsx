@@ -19,6 +19,7 @@ export default function RSSReader() {
     const [isAsking, setIsAsking] = useState(false);
     const [stats, setStats] = useState(null);
     const [selectedFeed, setSelectedFeed] = useState(null);
+    const [feedToDelete, setFeedToDelete] = useState(null);
 
     useEffect(() => {
         fetchFeeds();
@@ -113,8 +114,6 @@ export default function RSSReader() {
     };
 
     const deleteFeed = async (feedId) => {
-        if (!confirm('Are you sure you want to delete this feed and all its articles?')) return;
-
         try {
             const res = await fetch(`${API_BASE}/plugins/rss-reader/feeds/${feedId}`, {
                 method: 'DELETE'
@@ -127,6 +126,7 @@ export default function RSSReader() {
                 if (selectedFeed === feedId) {
                     setSelectedFeed(null);
                 }
+                setFeedToDelete(null);
             }
         } catch (e) {
             console.error("Failed to delete feed", e);
@@ -255,15 +255,42 @@ export default function RSSReader() {
                 </div>
             )}
 
+            {/* Delete Confirmation Modal */}
+            {feedToDelete && (
+                <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50" onClick={() => setFeedToDelete(null)}>
+                    <div className="bg-bg-card backdrop-blur-xl border border-glass-border rounded-2xl p-8 max-w-md w-full mx-4" onClick={(e) => e.stopPropagation()}>
+                        <h2 className="text-2xl font-bold mb-4">Delete Feed?</h2>
+                        <p className="text-text-muted mb-6">
+                            Are you sure you want to delete <span className="text-white font-bold">{feedToDelete.title}</span> and all its articles? This action cannot be undone.
+                        </p>
+                        <div className="flex gap-3">
+                            <button
+                                onClick={() => {
+                                    deleteFeed(feedToDelete.id);
+                                }}
+                                className="flex-1 bg-red-500 text-white p-3 rounded-xl font-bold hover:bg-red-600 transition-colors"
+                            >
+                                Delete
+                            </button>
+                            <button
+                                onClick={() => setFeedToDelete(null)}
+                                className="flex-1 p-3 rounded-xl font-semibold bg-glass border border-glass-border text-text-muted hover:text-text-main transition-colors"
+                            >
+                                Cancel
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             <div className="flex-1 grid grid-cols-12 gap-6 min-h-0">
                 {/* Feeds Sidebar */}
                 <div className="col-span-3 bg-bg-card backdrop-blur-xl border border-glass-border rounded-2xl p-6 overflow-y-auto">
                     <h2 className="text-lg font-bold mb-4">Feeds</h2>
                     <div
                         onClick={() => setSelectedFeed(null)}
-                        className={`p-3 rounded-xl cursor-pointer mb-2 transition-all ${
-                            !selectedFeed ? 'bg-glass border border-primary' : 'hover:bg-glass/50'
-                        }`}
+                        className={`p-3 rounded-xl cursor-pointer mb-2 transition-all ${!selectedFeed ? 'bg-glass border border-primary' : 'hover:bg-glass/50'
+                            }`}
                     >
                         <div className="font-bold text-sm">All Articles</div>
                         <div className="text-xs text-text-muted">{stats?.total_articles || 0} articles</div>
@@ -271,9 +298,8 @@ export default function RSSReader() {
                     {feeds.map((feed) => (
                         <div
                             key={feed.id}
-                            className={`p-3 rounded-xl mb-2 transition-all ${
-                                selectedFeed === feed.id ? 'bg-glass border border-primary' : 'hover:bg-glass/50'
-                            }`}
+                            className={`p-3 rounded-xl mb-2 transition-all ${selectedFeed === feed.id ? 'bg-glass border border-primary' : 'hover:bg-glass/50'
+                                }`}
                         >
                             <div
                                 onClick={() => setSelectedFeed(feed.id)}
@@ -284,13 +310,19 @@ export default function RSSReader() {
                             </div>
                             <div className="flex gap-1 mt-2">
                                 <button
-                                    onClick={() => refreshFeed(feed.id)}
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        refreshFeed(feed.id);
+                                    }}
                                     className="flex-1 text-xs bg-primary/20 text-primary px-2 py-1 rounded hover:bg-primary/30 transition-colors"
                                 >
                                     ↻ Refresh
                                 </button>
                                 <button
-                                    onClick={() => deleteFeed(feed.id)}
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        setFeedToDelete(feed);
+                                    }}
                                     className="flex-1 text-xs bg-red-500/20 text-red-400 px-2 py-1 rounded hover:bg-red-500/30 transition-colors"
                                 >
                                     Delete
