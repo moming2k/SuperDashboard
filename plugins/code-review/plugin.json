@@ -1,0 +1,12 @@
+{
+  "name": "code-review",
+  "displayName": "AI Code Review",
+  "description": "GPT-4 powered code review with security scanning, quality checks, and PR generation",
+  "version": "1.0.0",
+  "tab": {
+    "label": "Code Review",
+    "icon": "🔍",
+    "order": 30
+  },
+  "frontendComponent": "CodeReview"
+}
