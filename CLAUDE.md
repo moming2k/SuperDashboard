@@ -178,16 +178,33 @@ Each plugin has an optional `plugin.json` manifest:
 {
   "name": "jira",
   "displayName": "Jira Integration",
+  "description": "Jira Cloud integration with JQL sync and issue management",
+  "version": "1.0.0",
+  "tab": {
+    "label": "Jira Tasks",
+    "icon": "🏷️",
+    "order": 20
+  },
   "replaces": "tasks",
-  "frontendComponent": "JiraTasks"
+  "frontendComponent": "JiraTasks",
+  "icon": "🏷️",
+  "category": "integration"
 }
 ```
 
 **Manifest Fields:**
 - `name`: Plugin identifier (must match directory name)
 - `displayName`: Human-readable name for UI
-- `replaces`: Core component to replace (e.g., "tasks")
+- `description`: Brief description of plugin functionality
+- `version`: Semantic version number
+- `tab`: **Required for sidebar tab** (without this, plugin uses default 🧩 icon)
+  - `label`: Text displayed in sidebar
+  - `icon`: Emoji icon for sidebar tab
+  - `order`: Tab position (lower numbers appear first)
+- `replaces`: Core component to replace (e.g., "tasks") - optional
 - `frontendComponent`: React component filename (without .jsx)
+- `icon`: Fallback icon if tab not specified
+- `category`: Plugin category (e.g., "productivity", "integration")
 
 ### 3. Component Replacement System
 
@@ -593,9 +610,31 @@ export default MyComponent;
 {
   "name": "my-plugin",
   "displayName": "My Awesome Plugin",
-  "frontendComponent": "MyComponent"
+  "description": "Brief description of what this plugin does",
+  "version": "1.0.0",
+  "tab": {
+    "label": "My Plugin",
+    "icon": "🔧",
+    "order": 50
+  },
+  "frontendComponent": "MyComponent",
+  "icon": "🔧",
+  "category": "productivity"
 }
 ```
+
+**Important Fields:**
+- `name`: Plugin identifier (must match directory name)
+- `displayName`: Human-readable name
+- `description`: Brief description of functionality
+- `version`: Semantic version number
+- `tab`: **Required for sidebar visibility**
+  - `label`: Text shown in sidebar tab
+  - `icon`: Emoji icon for sidebar tab (prevents default 🧩 icon)
+  - `order`: Tab position (lower = higher in list)
+- `frontendComponent`: React component filename (without .jsx)
+- `icon`: Fallback icon if tab not specified
+- `category`: Plugin category (e.g., "productivity", "integration")
 
 #### Step 5: Create Symlink (if using frontend component)
 
@@ -1258,10 +1297,24 @@ plugins/my-plugin/
 {
   "name": "string (required)",
   "displayName": "string (optional)",
+  "description": "string (optional)",
+  "version": "string (optional)",
+  "tab": {
+    "label": "string (required for sidebar)",
+    "icon": "emoji (required for sidebar)",
+    "order": "number (optional, default: 100)"
+  },
   "replaces": "string (optional)",
-  "frontendComponent": "string (optional, required if has frontend)"
+  "frontendComponent": "string (optional, required if has frontend)",
+  "icon": "emoji (optional, fallback if tab.icon not set)",
+  "category": "string (optional)"
 }
 ```
+
+**Schema Notes:**
+- `tab` object is **required** if you want a custom icon in the sidebar (otherwise defaults to 🧩)
+- `tab.order` determines position: Dashboard (10), Jira Tasks (20), Snippets (30), Notifications (40)
+- `icon` field is used as fallback if `tab.icon` is not specified
 
 ---
 
