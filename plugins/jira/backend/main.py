@@ -145,3 +145,124 @@ async def add_comment(issue_key: str, body: str = Body(..., embed=True)):
         if response.status_code != 201:
             raise HTTPException(status_code=response.status_code, detail=response.text)
         return {"message": "Comment added"}
+
+# Command Palette Integration
+@router.get("/commands")
+async def get_commands():
+    """Return commands that this plugin provides to the Command Palette"""
+    return {
+        "commands": [
+            {
+                "id": "sync-issues",
+                "label": "Jira: Sync Issues",
+                "description": "Fetch latest issues from Jira using configured JQL",
+                "category": "Jira",
+                "icon": "🔄",
+                "endpoint": "/issues",
+                "method": "GET",
+                "requiresInput": False
+            },
+            {
+                "id": "create-ticket",
+                "label": "Jira: Create Ticket",
+                "description": "Create a new Jira issue",
+                "category": "Jira",
+                "icon": "🎫",
+                "endpoint": "/create-issue",
+                "method": "POST",
+                "requiresInput": True,
+                "inputSchema": {
+                    "type": "form",
+                    "fields": [
+                        {
+                            "name": "project",
+                            "label": "Project Key",
+                            "type": "text",
+                            "required": True,
+                            "placeholder": "e.g., PROJ"
+                        },
+                        {
+                            "name": "summary",
+                            "label": "Summary",
+                            "type": "text",
+                            "required": True,
+                            "placeholder": "Brief description of the issue"
+                        },
+                        {
+                            "name": "description",
+                            "label": "Description",
+                            "type": "textarea",
+                            "required": False,
+                            "placeholder": "Detailed description (optional)"
+                        },
+                        {
+                            "name": "issue_type",
+                            "label": "Issue Type",
+                            "type": "select",
+                            "required": True,
+                            "options": ["Task", "Bug", "Story", "Epic"]
+                        }
+                    ]
+                }
+            }
+        ]
+    }
+
+# Create Jira Issue endpoint
+class CreateIssueRequest(BaseModel):
+    project: str
+    summary: str
+    description: Optional[str] = None
+    issue_type: str = "Task"
+
+@router.post("/create-issue")
+async def create_jira_issue(request: CreateIssueRequest):
+    """Create a new Jira issue"""
+    if not all([JIRA_URL, JIRA_EMAIL, JIRA_API_TOKEN]):
+        raise HTTPException(status_code=400, detail="Jira credentials not configured")
+
+    url = f"{JIRA_URL}/rest/api/3/issue"
+
+    # Build description in ADF format
+    description_adf = {
+        "type": "doc",
+        "version": 1,
+        "content": [
+            {
+                "type": "paragraph",
+                "content": [
+                    {
+                        "type": "text",
+                        "text": request.description or ""
+                    }
+                ]
+            }
+        ]
+    } if request.description else None
+
+    payload = {
+        "fields": {
+            "project": {"key": request.project},
+            "summary": request.summary,
+            "issuetype": {"name": request.issue_type}
+        }
+    }
+
+    if description_adf:
+        payload["fields"]["description"] = description_adf
+
+    async with httpx.AsyncClient() as client:
+        response = await client.post(url, json=payload, auth=auth)
+        if response.status_code != 201:
+            raise HTTPException(
+                status_code=response.status_code,
+                detail=f"Jira API Error: {response.text}"
+            )
+
+        data = response.json()
+        return {
+            "success": True,
+            "key": data.get("key"),
+            "url": f"{JIRA_URL}/browse/{data.get('key')}",
+            "message": f"Created issue {data.get('key')}"
+        }

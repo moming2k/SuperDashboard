@@ -223,6 +223,9 @@ function App() {
   const visibleTabs = getVisibleTabs();
   const activePlugin = getActivePlugin();
 
+  // Get command palette plugin (if enabled)
+  const commandPalettePlugin = plugins.find(p => p.name === 'command-palette' && p.enabled);
+
   if (loading) {
     return (
       <div className="flex h-screen bg-bg-dark font-outfit text-text-main items-center justify-center">
@@ -405,6 +408,9 @@ function App() {
           onClose={() => setToast(null)}
         />
       )}
+
+      {/* Command Palette (Global Overlay) */}
+      {commandPalettePlugin && <PluginComponent plugin={commandPalettePlugin} />}
     </div>
   );
 }
