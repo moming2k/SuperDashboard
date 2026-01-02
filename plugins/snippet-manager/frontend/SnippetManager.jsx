@@ -285,7 +285,7 @@ function SnippetManager() {
       <div className="flex items-center justify-between mb-8">
         <div>
           <h1 className="text-4xl font-bold mb-2 bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent">
-            🧩 Snippet Manager
+            📋 Snippet Manager
           </h1>
           <p className="text-text-muted">
             Store and share code snippets with your team
