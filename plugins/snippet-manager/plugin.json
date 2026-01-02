@@ -3,6 +3,11 @@
   "displayName": "Snippet Manager",
   "description": "Store and share code snippets with your team",
   "version": "1.0.0",
+  "tab": {
+    "label": "Snippets",
+    "icon": "📋",
+    "order": 30
+  },
   "frontendComponent": "SnippetManager",
   "icon": "📋",
   "category": "productivity"
