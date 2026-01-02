@@ -33,10 +33,13 @@ class JiraIssue(BaseModel):
     updated: str
 
 @router.get("/issues", response_model=List[JiraIssue])
-async def get_jira_issues():
+async def get_jira_issues(notify: bool = False):
+    """
+    Get Jira issues. If notify=true, create notifications for new assignments.
+    """
     if not all([JIRA_URL, JIRA_EMAIL, JIRA_API_TOKEN]):
         raise HTTPException(status_code=400, detail="Jira credentials not configured")
-    
+
     url = f"{JIRA_URL}/rest/api/3/search/jql"
     # Using POST for search as suggested by the migration message
     payload = {
@@ -44,19 +47,19 @@ async def get_jira_issues():
         "fields": ["summary", "description", "status", "priority", "assignee", "created", "updated"],
         "maxResults": 50
     }
-    
+
     async with httpx.AsyncClient() as client:
         response = await client.post(url, json=payload, auth=auth)
         if response.status_code != 200:
             # Handle potential 410 or other errors with clear info
             print(f"DEBUG JIRA ERROR: {response.status_code} - {response.text}")
             raise HTTPException(status_code=response.status_code, detail=f"Jira API Error: {response.text}")
-        
+
         data = response.json()
         issues = []
         for issue in data.get("issues", []):
             fields = issue["fields"]
-            
+
             # Helper to get description text (Jira ADF format handling)
             description_text = ""
             desc = fields.get("description")
@@ -66,8 +69,8 @@ async def get_jira_issues():
                     description_text = desc.get("content", [{}])[0].get("content", [{}])[0].get("text", "")
                 except (IndexError, KeyError):
                     description_text = str(desc) # Fallback to raw string if parsing fails
-            
-            issues.append(JiraIssue(
+
+            jira_issue = JiraIssue(
                 key=issue["key"],
                 summary=fields["summary"],
                 description=description_text,
@@ -76,7 +79,28 @@ async def get_jira_issues():
                 assignee=fields["assignee"]["displayName"] if fields.get("assignee") else "Unassigned",
                 created=fields["created"],
                 updated=fields["updated"]
-            ))
+            )
+            issues.append(jira_issue)
+
+            # Create notification for assigned issues if notify flag is set
+            if notify and fields.get("assignee"):
+                try:
+                    notification_data = {
+                        "key": issue["key"],
+                        "summary": fields["summary"],
+                        "type": fields["issuetype"]["name"] if fields.get("issuetype") else "Task",
+                        "assignee": fields["assignee"]["displayName"],
+                        "priority": fields["priority"]["name"],
+                        "url": f"{JIRA_URL}/browse/{issue['key']}"
+                    }
+                    # Send to notification center
+                    notif_response = await client.post(
+                        "http://localhost:8000/plugins/notification-center/integrations/jira/issue-assigned",
+                        json=notification_data
+                    )
+                except Exception as e:
+                    print(f"Failed to create notification for {issue['key']}: {str(e)}")
+
         return issues
 
 @router.post("/issues/{issue_key}/status")

@@ -1,0 +1,9 @@
+{
+  "name": "notification-center",
+  "displayName": "Notification Center",
+  "description": "Unified notification hub with intelligent filtering and custom rules",
+  "version": "1.0.0",
+  "frontendComponent": "NotificationCenter",
+  "icon": "🔔",
+  "category": "productivity"
+}
