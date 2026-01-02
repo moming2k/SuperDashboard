@@ -1,0 +1,9 @@
+{
+  "name": "snippet-manager",
+  "displayName": "Snippet Manager",
+  "description": "Store and share code snippets with your team",
+  "version": "1.0.0",
+  "frontendComponent": "SnippetManager",
+  "icon": "📝",
+  "category": "productivity"
+}
