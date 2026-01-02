@@ -1,0 +1,10 @@
+{
+  "name": "command-palette",
+  "displayName": "Command Palette",
+  "version": "1.0.0",
+  "description": "Keyboard-driven command interface for quick actions (Cmd/Ctrl+Shift+P)",
+  "frontendComponent": "CommandPalette",
+  "tab": {
+    "enabled": false
+  }
+}

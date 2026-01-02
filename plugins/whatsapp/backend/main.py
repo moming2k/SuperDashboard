@@ -402,3 +402,61 @@ async def get_config_instructions():
             "ai_enabled": bool(OPENAI_API_KEY)
         }
     }
+
+# Command Palette Integration
+@router.get("/commands")
+async def get_commands():
+    """Return commands that this plugin provides to the Command Palette"""
+    return {
+        "commands": [
+            {
+                "id": "send-message",
+                "label": "WhatsApp: Send Message",
+                "description": "Send a WhatsApp message via Twilio",
+                "category": "WhatsApp",
+                "icon": "💬",
+                "endpoint": "/send",
+                "method": "POST",
+                "requiresInput": True,
+                "inputSchema": {
+                    "type": "form",
+                    "fields": [
+                        {
+                            "name": "to",
+                            "label": "Phone Number",
+                            "type": "text",
+                            "required": True,
+                            "placeholder": "14155551234 (without whatsapp: prefix)"
+                        },
+                        {
+                            "name": "body",
+                            "label": "Message",
+                            "type": "textarea",
+                            "required": True,
+                            "placeholder": "Your message here..."
+                        }
+                    ]
+                }
+            },
+            {
+                "id": "view-conversations",
+                "label": "WhatsApp: View Conversations",
+                "description": "List all WhatsApp conversations",
+                "category": "WhatsApp",
+                "icon": "📋",
+                "endpoint": "/conversations",
+                "method": "GET",
+                "requiresInput": False
+            },
+            {
+                "id": "clear-history",
+                "label": "WhatsApp: Clear Message History",
+                "description": "Delete all WhatsApp messages from database",
+                "category": "WhatsApp",
+                "icon": "🗑️",
+                "endpoint": "/messages",
+                "method": "DELETE",
+                "requiresInput": False
+            }
+        ]
+    }

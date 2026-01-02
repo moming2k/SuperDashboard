@@ -326,3 +326,85 @@ async def health_check():
         "status": "healthy",
         "openai_configured": api_key_configured
     }
+
+# Command Palette Integration
+@router.get("/commands")
+async def get_commands():
+    """Return commands that this plugin provides to the Command Palette"""
+    return {
+        "commands": [
+            {
+                "id": "review-code",
+                "label": "Code Review: General Review",
+                "description": "AI-powered comprehensive code review",
+                "category": "Code Review",
+                "icon": "🔍",
+                "endpoint": "/review",
+                "method": "POST",
+                "requiresInput": True,
+                "inputSchema": {
+                    "type": "form",
+                    "fields": [
+                        {
+                            "name": "code",
+                            "label": "Code to Review",
+                            "type": "textarea",
+                            "required": True,
+                            "placeholder": "Paste your code here..."
+                        },
+                        {
+                            "name": "language",
+                            "label": "Language",
+                            "type": "select",
+                            "required": False,
+                            "options": ["python", "javascript", "typescript", "java", "go", "rust", "c++", "auto-detect"]
+                        }
+                    ]
+                }
+            },
+            {
+                "id": "review-security",
+                "label": "Code Review: Security Scan",
+                "description": "Focused security vulnerability analysis",
+                "category": "Code Review",
+                "icon": "🔒",
+                "endpoint": "/review/security",
+                "method": "POST",
+                "requiresInput": True,
+                "inputSchema": {
+                    "type": "form",
+                    "fields": [
+                        {
+                            "name": "code",
+                            "label": "Code to Review",
+                            "type": "textarea",
+                            "required": True,
+                            "placeholder": "Paste your code here..."
+                        }
+                    ]
+                }
+            },
+            {
+                "id": "review-quality",
+                "label": "Code Review: Quality Check",
+                "description": "Code quality and maintainability analysis",
+                "category": "Code Review",
+                "icon": "⭐",
+                "endpoint": "/review/quality",
+                "method": "POST",
+                "requiresInput": True,
+                "inputSchema": {
+                    "type": "form",
+                    "fields": [
+                        {
+                            "name": "code",
+                            "label": "Code to Review",
+                            "type": "textarea",
+                            "required": True,
+                            "placeholder": "Paste your code here..."
+                        }
+                    ]
+                }
+            }
+        ]
+    }

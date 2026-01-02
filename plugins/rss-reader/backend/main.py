@@ -523,3 +523,54 @@ async def get_stats(db: Session = Depends(get_db)):
         "articles_by_feed": articles_by_feed,
         "scheduler_running": scheduler.running
     }
+
+# Command Palette Integration
+@router.get("/commands")
+async def get_commands():
+    """Return commands that this plugin provides to the Command Palette"""
+    return {
+        "commands": [
+            {
+                "id": "fetch-all",
+                "label": "RSS: Fetch All Feeds",
+                "description": "Update all RSS feeds and fetch new articles",
+                "category": "RSS",
+                "icon": "📰",
+                "endpoint": "/fetch-all",
+                "method": "POST",
+                "requiresInput": False
+            },
+            {
+                "id": "add-feed",
+                "label": "RSS: Add Feed",
+                "description": "Subscribe to a new RSS feed",
+                "category": "RSS",
+                "icon": "➕",
+                "endpoint": "/feeds",
+                "method": "POST",
+                "requiresInput": True,
+                "inputSchema": {
+                    "type": "form",
+                    "fields": [
+                        {
+                            "name": "url",
+                            "label": "Feed URL",
+                            "type": "text",
+                            "required": True,
+                            "placeholder": "https://example.com/feed.xml"
+                        }
+                    ]
+                }
+            },
+            {
+                "id": "view-stats",
+                "label": "RSS: View Statistics",
+                "description": "Show feed and article statistics",
+                "category": "RSS",
+                "icon": "📊",
+                "endpoint": "/stats",
+                "method": "GET",
+                "requiresInput": False
+            }
+        ]
+    }
