@@ -1,5 +1,6 @@
 import React, { useState, useEffect, Suspense, lazy } from 'react';
 import Toast from './components/Toast';
+import config, { API_BASE } from './config';
 import {
   DndContext,
   closestCenter,
@@ -16,12 +17,6 @@ import {
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-
-// Detect if running in devcontainer and use appropriate backend port
-const isDevContainer = import.meta.env.VITE_DEVCONTAINER === 'true';
-const backendPort = isDevContainer ? 18010 : 8000;
-const API_BASE = `http://localhost:${backendPort}`;
-
 
 const componentCache = {};
 

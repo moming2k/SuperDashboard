@@ -4,8 +4,7 @@ import ChatInput from '../../components/ChatInput';
 import TypingIndicator from '../../components/TypingIndicator';
 import ModelSelector from '../../components/ModelSelector';
 import MCPSettings from '../../components/MCPSettings';
-
-const API_BASE = 'http://localhost:8000';
+import { API_BASE } from '../../../../../frontend/src/config';
 
 function AIAgent() {
   const [conversation, setConversation] = useState([]);
