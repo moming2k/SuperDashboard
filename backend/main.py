@@ -13,10 +13,19 @@ load_dotenv()
 
 app = FastAPI(title="SuperDashboard API")
 
-# Configure CORS
+# Configure CORS with environment-aware origins
+# In development, defaults to allowing all origins
+# In production, should be set to specific allowed origins (comma-separated)
+cors_origins = os.getenv("CORS_ORIGINS", "*")
+if cors_origins == "*":
+    allowed_origins = ["*"]
+else:
+    # Split comma-separated origins and strip whitespace
+    allowed_origins = [origin.strip() for origin in cors_origins.split(",")]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Adjust in production
+    allow_origins=allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

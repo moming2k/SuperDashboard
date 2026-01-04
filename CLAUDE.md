@@ -132,7 +132,7 @@ SuperDashboard/
 
 **Backend Features:**
 - Async/await patterns throughout
-- CORS enabled for all origins (configure for production)
+- Environment-aware CORS configuration (defaults to all origins in development)
 - No database (in-memory storage only)
 - Dynamic plugin loading with importlib
 
@@ -744,17 +744,30 @@ async def ask_agent(messages: List[ChatMessage]):
 
 ### CORS Configuration
 
+CORS is configured using the `CORS_ORIGINS` environment variable for flexible deployment:
+
 ```python
 from fastapi.middleware.cors import CORSMiddleware
 
+# Configure CORS with environment-aware origins
+cors_origins = os.getenv("CORS_ORIGINS", "*")
+if cors_origins == "*":
+    allowed_origins = ["*"]
+else:
+    # Split comma-separated origins and strip whitespace
+    allowed_origins = [origin.strip() for origin in cors_origins.split(",")]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # TODO: Restrict in production
+    allow_origins=allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 ```
+
+**Development**: Defaults to `*` (all origins)
+**Production**: Set `CORS_ORIGINS=https://app.example.com,https://www.example.com` in `.env`
 
 ---
 
@@ -838,6 +851,12 @@ Create `backend/.env`:
 ```bash
 # Required for AI features
 OPENAI_API_KEY=sk-...
+
+# CORS Configuration (optional)
+# Comma-separated list of allowed origins
+# Defaults to "*" (all origins) if not set - suitable for development
+# For production, specify exact origins
+CORS_ORIGINS=https://app.example.com,https://www.example.com
 
 # Required for Jira plugin
 JIRA_URL=https://your-domain.atlassian.net
@@ -1031,17 +1050,17 @@ import(`./plugins/jira/JiraTasks`)
 
 ### 2. CORS Configuration
 
-Backend allows all origins (`allow_origins=["*"]`). **Change this in production**:
+CORS is configured via the `CORS_ORIGINS` environment variable:
 
-```python
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["https://your-frontend.com"],  # Restrict origins
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+- **Development**: Defaults to `*` (all origins) when `CORS_ORIGINS` is not set or set to `*`
+- **Production**: Set `CORS_ORIGINS` in your `.env` file to restrict allowed origins
+
+```bash
+# .env file for production
+CORS_ORIGINS=https://your-frontend.com,https://www.your-frontend.com
 ```
+
+The backend automatically parses comma-separated origins and applies them to the CORS middleware.
 
 ### 3. No Database Persistence
 
@@ -1211,7 +1230,7 @@ The project has been evolving toward a cleaner plugin architecture with better s
 - No rate limiting
 - No request validation beyond Pydantic
 - No automated tests
-- CORS allows all origins
+- CORS defaults to all origins in development (configurable via environment variable)
 - No error tracking (Sentry, etc.)
 - No performance monitoring
 
