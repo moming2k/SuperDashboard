@@ -120,6 +120,52 @@ mcp_enabled = False
 async def root():
     return {"message": "Welcome to SuperDashboard API"}
 
+@app.get("/health")
+async def health_check():
+    """
+    Health check endpoint for monitoring system status.
+    Returns information about API status, dependencies, and plugins.
+    """
+    from datetime import datetime
+
+    # Check OpenAI API key status
+    openai_configured = bool(client.api_key)
+
+    # Count loaded plugins
+    plugins_info = await list_plugins()
+    total_plugins = len(plugins_info)
+    enabled_plugins = len([p for p in plugins_info if p.get("enabled", False)])
+
+    # Determine overall health status
+    status = "healthy"
+    issues = []
+
+    if not openai_configured:
+        issues.append("OpenAI API key not configured")
+
+    health_data = {
+        "status": status,
+        "timestamp": datetime.utcnow().isoformat() + "Z",
+        "api_version": "2.0",
+        "services": {
+            "openai": {
+                "configured": openai_configured,
+                "status": "ready" if openai_configured else "not_configured"
+            },
+            "plugins": {
+                "total": total_plugins,
+                "enabled": enabled_plugins,
+                "status": "operational"
+            }
+        }
+    }
+
+    if issues:
+        health_data["issues"] = issues
+        health_data["status"] = "degraded"
+
+    return health_data
+
 @app.get("/tasks", response_model=List[Task])
 async def get_tasks():
     return db_tasks
