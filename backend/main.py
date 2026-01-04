@@ -2,14 +2,18 @@ import os
 import importlib.util
 import json
 from pathlib import Path
-from fastapi import FastAPI, UploadFile, File, HTTPException
+from fastapi import FastAPI, UploadFile, File, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List, Optional, Dict, Any
 import openai
 from dotenv import load_dotenv
+from sqlalchemy.orm import Session
 
 load_dotenv()
+
+# Import database modules
+from database import init_db, get_db, PluginOrder
 
 app = FastAPI(title="SuperDashboard API")
 
@@ -32,7 +36,10 @@ app.add_middleware(
 )
 
 from openai import OpenAI
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+
+# Make OpenAI client optional - only initialize if API key is set
+openai_api_key = os.getenv("OPENAI_API_KEY")
+client = OpenAI(api_key=openai_api_key) if openai_api_key else None
 
 # Plugin state management
 PLUGIN_STATE_FILE = os.path.join(os.path.dirname(__file__), "plugin_state.json")
@@ -112,9 +119,34 @@ class PluginToggleRequest(BaseModel):
 class PluginConfigRequest(BaseModel):
     config: Dict[str, Any]
 
+class PluginOrderUpdate(BaseModel):
+    plugin_name: str
+    order_index: int
+
+class PluginOrderBulkUpdate(BaseModel):
+    orders: List[PluginOrderUpdate]
+
 db_tasks = []
 mcp_servers = []
 mcp_enabled = False
+
+# Initialize database on startup
+init_db()
+
+def get_plugin_order_from_db(plugin_name: str, db: Session) -> Optional[int]:
+    """Get plugin order from database"""
+    order_entry = db.query(PluginOrder).filter(PluginOrder.plugin_name == plugin_name).first()
+    return order_entry.order_index if order_entry else None
+
+def set_plugin_order_in_db(plugin_name: str, order_index: int, db: Session):
+    """Set plugin order in database"""
+    order_entry = db.query(PluginOrder).filter(PluginOrder.plugin_name == plugin_name).first()
+    if order_entry:
+        order_entry.order_index = order_index
+    else:
+        order_entry = PluginOrder(plugin_name=plugin_name, order_index=order_index)
+        db.add(order_entry)
+    db.commit()
 
 @app.get("/")
 async def root():
@@ -276,7 +308,7 @@ def load_plugins():
 load_plugins()
 
 @app.get("/plugins")
-async def list_plugins():
+async def list_plugins(db: Session = Depends(get_db)):
     import json
     plugins = []
 
@@ -304,6 +336,7 @@ async def list_plugins():
                 enabled = is_plugin_enabled(item, is_core)
                 status = "enabled" if enabled else "disabled"
                 config = get_plugin_config(item)
+                order = get_plugin_order_from_db(item, db)
 
                 plugins.append({
                     "name": item,
@@ -311,7 +344,8 @@ async def list_plugins():
                     "enabled": enabled,
                     "isCore": is_core,
                     "config": config,
-                    "manifest": manifest
+                    "manifest": manifest,
+                    "order": order
                 })
 
     # Scan root plugins directory
@@ -342,6 +376,7 @@ async def list_plugins():
                 enabled = is_plugin_enabled(item, False)
                 status = "enabled" if enabled else "disabled"
                 config = get_plugin_config(item)
+                order = get_plugin_order_from_db(item, db)
 
                 plugins.append({
                     "name": item,
@@ -349,8 +384,12 @@ async def list_plugins():
                     "enabled": enabled,
                     "isCore": False,
                     "config": config,
-                    "manifest": manifest
+                    "manifest": manifest,
+                    "order": order
                 })
+
+    # Sort plugins by order (None values go to the end)
+    plugins.sort(key=lambda p: (p["order"] is None, p["order"] if p["order"] is not None else 0))
 
     return plugins
 
@@ -408,6 +447,20 @@ async def update_plugin_configuration(plugin_name: str, request: PluginConfigReq
         return {
             "message": f"Plugin {plugin_name} configuration updated successfully",
             "config": request.config
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.put("/plugins/reorder")
+async def reorder_plugins(request: PluginOrderBulkUpdate, db: Session = Depends(get_db)):
+    """Update the display order for multiple plugins"""
+    try:
+        for order_update in request.orders:
+            set_plugin_order_in_db(order_update.plugin_name, order_update.order_index, db)
+
+        return {
+            "message": "Plugin order updated successfully",
+            "updated_count": len(request.orders)
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
