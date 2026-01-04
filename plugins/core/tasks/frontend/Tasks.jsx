@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { API_BASE } from '../../../../../frontend/src/config';
+import { API_BASE } from '../../config';
 
 function Tasks() {
   const [tasks, setTasks] = useState([]);
@@ -46,9 +46,8 @@ function Tasks() {
           <div key={task.id} className="bg-glass border border-glass-border rounded-2xl p-6 transition-transform duration-300 hover:scale-[1.02] hover:border-primary">
             <h4 className="text-lg font-bold mb-2">{task.title}</h4>
             <p className="text-text-muted mb-4 line-clamp-2">{task.description}</p>
-            <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
-              task.status === 'completed' ? 'bg-green-500/20 text-green-400' : 'bg-amber-500/20 text-amber-400'
-            }`}>
+            <span className={`px-3 py-1 rounded-full text-xs font-semibold ${task.status === 'completed' ? 'bg-green-500/20 text-green-400' : 'bg-amber-500/20 text-amber-400'
+              }`}>
               {task.status}
             </span>
           </div>

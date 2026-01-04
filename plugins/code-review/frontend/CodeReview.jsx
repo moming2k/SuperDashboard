@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { API_BASE } from '../../../frontend/src/config';
+import { API_BASE } from '../../config';
 
 function CodeReview() {
   const [activeView, setActiveView] = useState('review');

@@ -9,6 +9,12 @@ Complete setup instructions for local development, Docker, and DevContainer envi
 ### Required
 - **Python 3.11+** - [Download](https://www.python.org/downloads/)
 - **Node.js 18+** - [Download](https://nodejs.org/)
+- **pnpm 8+** - Fast, disk space efficient package manager
+  ```bash
+  npm install -g pnpm
+  # or
+  curl -fsSL https://get.pnpm.io/install.sh | sh -
+  ```
 - **PostgreSQL 16** - [Download](https://www.postgresql.org/download/) or use Docker
 
 ### Recommended
@@ -72,7 +78,7 @@ nano .env  # Edit and add your API keys
 ```bash
 cd frontend
 
-npm install                      # Install dependencies
+pnpm install                     # Install dependencies
 cp .env.example .env            # Create environment file
 ```
 
@@ -108,7 +114,7 @@ python main.py                   # Start backend server
 **Terminal 2 - Frontend:**
 ```bash
 cd frontend
-npm run dev                      # Start frontend dev server
+pnpm dev                         # Start frontend dev server
 ```
 
 **Access:**
@@ -242,7 +248,7 @@ deactivate
 
 ### Installing New Dependencies
 
-**Using pyproject.toml (Recommended):**
+**Python (Backend):**
 
 ```bash
 # Activate virtual environment first
@@ -255,16 +261,19 @@ uv pip install -e .              # With uv (fast)
 pip install -e .                 # With pip (slower)
 ```
 
-**Using requirements.txt (Legacy):**
+**Node.js (Frontend):**
 
 ```bash
-# Add dependency to requirements.txt
-echo "new-package==1.0.0" >> backend/requirements.txt
+cd frontend
 
-# Install
-uv pip install -r requirements.txt  # With uv
-# or
-pip install -r requirements.txt      # With pip
+# Add a dependency
+pnpm add package-name
+
+# Add a dev dependency
+pnpm add -D package-name
+
+# Remove a dependency
+pnpm remove package-name
 ```
 
 ### Running Tests
@@ -333,6 +342,20 @@ netstat -ano | findstr :8000     # Windows
 export PORT=8001                 # Use different port
 ```
 
+### pnpm Not Found
+
+**Problem:** `command not found: pnpm`
+```bash
+# Install pnpm globally
+npm install -g pnpm
+
+# Or use standalone script
+curl -fsSL https://get.pnpm.io/install.sh | sh -
+
+# Verify installation
+pnpm --version
+```
+
 ### uv Not Found
 
 **Problem:** `command not found: uv`
@@ -366,6 +389,11 @@ source ~/.bashrc
 - ✅ **Never commit** `.venv` to git (already in `.gitignore`)
 - ✅ **Use `uv`** for 10-100x faster package installation
 - ✅ **Use `pyproject.toml`** for dependency management (modern standard)
+
+### Package Management
+- ✅ **Use `pnpm`** instead of npm for faster, more efficient installs
+- ✅ **Commit `pnpm-lock.yaml`** to ensure consistent dependencies
+- ✅ **Never commit** `node_modules` or `.pnpm-store` to git
 
 ### Development
 - ✅ **Use docker-compose** for full stack development

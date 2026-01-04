@@ -4,7 +4,7 @@ import ChatInput from '../../components/ChatInput';
 import TypingIndicator from '../../components/TypingIndicator';
 import ModelSelector from '../../components/ModelSelector';
 import MCPSettings from '../../components/MCPSettings';
-import { API_BASE } from '../../../../../frontend/src/config';
+import { API_BASE } from '../../config';
 
 function AIAgent() {
   const [conversation, setConversation] = useState([]);
@@ -142,14 +142,12 @@ function AIAgent() {
             <span className="text-sm text-text-muted">MCP</span>
             <button
               onClick={handleMCPToggle}
-              className={`relative w-12 h-6 rounded-full transition-colors ${
-                mcpEnabled ? 'bg-primary' : 'bg-glass-border'
-              }`}
+              className={`relative w-12 h-6 rounded-full transition-colors ${mcpEnabled ? 'bg-primary' : 'bg-glass-border'
+                }`}
             >
               <div
-                className={`absolute top-1 left-1 w-4 h-4 bg-white rounded-full transition-transform ${
-                  mcpEnabled ? 'translate-x-6' : ''
-                }`}
+                className={`absolute top-1 left-1 w-4 h-4 bg-white rounded-full transition-transform ${mcpEnabled ? 'translate-x-6' : ''
+                  }`}
               />
             </button>
             {mcpEnabled && mcpStatus?.servers?.length > 0 && (

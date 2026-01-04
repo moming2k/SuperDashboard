@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { API_BASE } from '../../../../../frontend/src/config';
+import { API_BASE } from '../../config';
 
 function Dashboard() {
   const [tasks, setTasks] = useState([]);

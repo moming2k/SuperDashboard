@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { API_BASE } from '../../../frontend/src/config';
+import { API_BASE } from '../../config';
 
 export default function JiraTasks() {
     const [jiraIssues, setJiraIssues] = useState([]);
@@ -102,7 +102,7 @@ export default function JiraTasks() {
                         <h4 className="text-lg font-bold mb-4 line-clamp-2 h-14">{issue.summary}</h4>
                         <div className="flex justify-between items-center mt-auto border-t border-glass-border/30 pt-4">
                             <span className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${issue.status === 'Done' ? 'bg-green-500/20 text-green-400' :
-                                    issue.status === 'In Progress' ? 'bg-blue-500/20 text-blue-400' : 'bg-amber-500/20 text-amber-400'
+                                issue.status === 'In Progress' ? 'bg-blue-500/20 text-blue-400' : 'bg-amber-500/20 text-amber-400'
                                 }`}>
                                 {issue.status}
                             </span>

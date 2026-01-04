@@ -14,7 +14,7 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      test: [ "CMD-SHELL", "pg_isready -U postgres" ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -50,14 +50,17 @@ services:
     working_dir: /app
     volumes:
       - ./frontend:/app
-      - /app/node_modules  # Anonymous volume for node_modules
+      - /app/node_modules # Anonymous volume for node_modules
+      - pnpm-store:/root/.local/share/pnpm/store # pnpm store cache
     ports:
       - "5173:5173"
-    command: sh -c "npm install && npm run dev -- --host 0.0.0.0"
+    command: sh -c "corepack enable && corepack prepare pnpm@latest --activate && pnpm install && pnpm dev -- --host 0.0.0.0"
     environment:
       VITE_API_BASE_URL: http://localhost:8000
     restart: unless-stopped
 
 volumes:
   postgres_data:
+    driver: local
+  pnpm-store:
     driver: local

@@ -17,6 +17,9 @@ services:
       # Persist node_modules (optional, for faster rebuilds)
       - node-modules-data:/workspace/frontend/node_modules
 
+      # Persist pnpm store (for faster package installations)
+      - pnpm-store-data:/home/vscode/.local/share/pnpm/store
+
       # Persist Claude plugins (separate from host to avoid path conflicts)
       - claude-plugins:/home/vscode/.claude/plugins
 
@@ -59,5 +62,6 @@ services:
 volumes:
   venv-data:
   node-modules-data:
+  pnpm-store-data:
   claude-plugins:
   postgres-data:

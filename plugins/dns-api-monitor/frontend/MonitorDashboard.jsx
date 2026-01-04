@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { API_BASE } from '../../../frontend/src/config';
+import { API_BASE } from '../../config';
 
 function MonitorDashboard() {
   const [dnsMonitors, setDnsMonitors] = useState([]);
@@ -165,21 +165,19 @@ function MonitorDashboard() {
       <div className="flex gap-4 mb-6">
         <button
           onClick={() => setActiveTab('dns')}
-          className={`px-6 py-3 rounded-xl font-semibold transition-all ${
-            activeTab === 'dns'
+          className={`px-6 py-3 rounded-xl font-semibold transition-all ${activeTab === 'dns'
               ? 'bg-primary text-white'
               : 'bg-glass text-text-muted hover:bg-glass-hover'
-          }`}
+            }`}
         >
           DNS Monitors ({dnsMonitors.length})
         </button>
         <button
           onClick={() => setActiveTab('api')}
-          className={`px-6 py-3 rounded-xl font-semibold transition-all ${
-            activeTab === 'api'
+          className={`px-6 py-3 rounded-xl font-semibold transition-all ${activeTab === 'api'
               ? 'bg-accent text-white'
               : 'bg-glass text-text-muted hover:bg-glass-hover'
-          }`}
+            }`}
         >
           API Monitors ({apiMonitors.length})
         </button>
@@ -312,9 +310,8 @@ function MonitorDashboard() {
                   <div className="flex-1">
                     <div className="flex items-center gap-3 mb-2">
                       <h3 className="text-xl font-bold">{monitor.domain}</h3>
-                      <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
-                        monitor.status === 'active' ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'
-                      }`}>
+                      <span className={`px-3 py-1 rounded-full text-xs font-semibold ${monitor.status === 'active' ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'
+                        }`}>
                         {monitor.status}
                       </span>
                       {monitor.changes_detected > 0 && (
@@ -393,9 +390,8 @@ function MonitorDashboard() {
                       <span className="px-3 py-1 rounded-full text-xs font-semibold bg-blue-500/20 text-blue-400">
                         {monitor.method}
                       </span>
-                      <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
-                        monitor.status === 'active' ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'
-                      }`}>
+                      <span className={`px-3 py-1 rounded-full text-xs font-semibold ${monitor.status === 'active' ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'
+                        }`}>
                         {monitor.status}
                       </span>
                       {monitor.changes_detected > 0 && (
@@ -407,11 +403,10 @@ function MonitorDashboard() {
                     <div className="text-sm text-text-muted space-y-1">
                       {monitor.last_response && (
                         <>
-                          <div>Status: <span className={`font-semibold ${
-                            monitor.last_response.status_code >= 200 && monitor.last_response.status_code < 300
+                          <div>Status: <span className={`font-semibold ${monitor.last_response.status_code >= 200 && monitor.last_response.status_code < 300
                               ? 'text-green-400'
                               : 'text-red-400'
-                          }`}>{monitor.last_response.status_code}</span></div>
+                            }`}>{monitor.last_response.status_code}</span></div>
                           <div>Content hash: <span className="text-text-main font-mono text-xs">{monitor.last_hash}</span></div>
                         </>
                       )}
@@ -453,11 +448,10 @@ function MonitorDashboard() {
                           <div key={idx} className="bg-bg-dark rounded-lg p-3 text-sm">
                             <div className="text-text-muted mb-1">{formatTimestamp(change.timestamp)}</div>
                             <div className="text-text-main space-y-1">
-                              <div>Status: <span className={`font-semibold ${
-                                change.status_code >= 200 && change.status_code < 300
+                              <div>Status: <span className={`font-semibold ${change.status_code >= 200 && change.status_code < 300
                                   ? 'text-green-400'
                                   : 'text-red-400'
-                              }`}>{change.status_code}</span></div>
+                                }`}>{change.status_code}</span></div>
                               <div className="font-mono text-xs">
                                 <span className="text-red-400">{change.old_hash}</span>
                                 {' → '}

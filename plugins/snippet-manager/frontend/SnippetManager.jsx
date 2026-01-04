@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { API_BASE } from '../../../frontend/src/config';
+import { API_BASE } from '../../config';
 
 // Simple syntax highlighting using HTML
 const SyntaxHighlight = ({ code, language }) => {

@@ -39,8 +39,11 @@ RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
 # Install uv for fast Python package management
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 
+# Enable corepack and install pnpm
+RUN corepack enable && corepack prepare pnpm@latest --activate
+
 # Verify installations
-RUN python --version && node --version && npm --version && uv --version
+RUN python --version && node --version && npm --version && pnpm --version && uv --version
 
 # Create a non-root user
 ARG USERNAME=vscode

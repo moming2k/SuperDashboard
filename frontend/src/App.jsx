@@ -130,13 +130,12 @@ const SortablePluginItem = ({ plugin, togglePlugin, openConfigModal }) => {
           <button
             onClick={() => togglePlugin(plugin.name, plugin.enabled)}
             disabled={plugin.isCore}
-            className={`p-2 px-4 rounded-xl font-semibold text-sm transition-all duration-300 ${
-              plugin.isCore
-                ? 'bg-gray-600/30 text-gray-500 cursor-not-allowed'
-                : plugin.enabled
-                  ? 'bg-red-500/20 text-red-400 hover:bg-red-500/30 border border-red-500/30'
-                  : 'bg-green-500/20 text-green-400 hover:bg-green-500/30 border border-green-500/30'
-            }`}
+            className={`p-2 px-4 rounded-xl font-semibold text-sm transition-all duration-300 ${plugin.isCore
+              ? 'bg-gray-600/30 text-gray-500 cursor-not-allowed'
+              : plugin.enabled
+                ? 'bg-red-500/20 text-red-400 hover:bg-red-500/30 border border-red-500/30'
+                : 'bg-green-500/20 text-green-400 hover:bg-green-500/30 border border-green-500/30'
+              }`}
           >
             {plugin.enabled ? 'Disable' : 'Enable'}
           </button>
@@ -264,6 +263,8 @@ function App() {
 
       if (res.ok) {
         setToast({ message: 'Plugin order saved successfully!', type: 'success' });
+        // Refresh plugin list to update navigation order in real-time
+        await fetchPlugins();
       } else {
         const data = await res.json();
         setToast({ message: `Error: ${data.detail || 'Failed to save order'}`, type: 'error' });
@@ -353,7 +354,7 @@ function App() {
       return manifest.frontendComponent;
     });
 
-    // Map to tab objects and sort by order
+    // Map to tab objects and sort by order (using backend's stored order)
     return visiblePlugins
       .map(plugin => {
         const manifest = plugin.manifest || {};
@@ -362,7 +363,7 @@ function App() {
         return {
           id: tab.id || manifest.name,
           label: `${tab.icon || '🧩'} ${tab.label || manifest.displayName || manifest.name}`,
-          order: tab.order !== undefined ? tab.order : 100,
+          order: plugin.order !== null && plugin.order !== undefined ? plugin.order : 999,
           plugin: plugin
         };
       })

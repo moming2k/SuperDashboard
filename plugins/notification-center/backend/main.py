@@ -1,11 +1,36 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 from typing import Optional, List, Dict, Any
+from sqlalchemy.orm import Session
 from datetime import datetime
 from enum import Enum
 import uuid
+import sys
+import os
+
+# Add parent directory to path
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../../../')))
+from plugins.shared.database import get_db, init_db
+
+# Import database models - use direct import to avoid module name issues
+import importlib.util
+spec = importlib.util.spec_from_file_location(
+    "notification_db",
+    os.path.join(os.path.dirname(__file__), "database.py")
+)
+notification_db_module = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(notification_db_module)
+DBNotification = notification_db_module.Notification
+DBNotificationRule = notification_db_module.NotificationRule
 
 router = APIRouter()
+
+# Initialize database tables on module load
+try:
+    init_db()
+    print("🔔 Notification Center database tables initialized")
+except Exception as e:
+    print(f"⚠️  Notification Center database initialization warning: {e}")
 
 # Enums for notification attributes
 class NotificationPriority(str, Enum):
@@ -65,9 +90,7 @@ class NotificationRule(BaseModel):
     actions: Dict[str, Any]  # e.g., {"priority": "high", "notify": true}
     created_at: Optional[str] = None
 
-# In-memory storage (replace with database in production)
-notifications_db: List[Notification] = []
-rules_db: List[NotificationRule] = []
+# Database storage (migrated from in-memory)
 
 # Helper function to evaluate rule conditions
 def evaluate_condition(notification: Notification, condition: RuleCondition) -> bool:
@@ -96,12 +119,22 @@ def evaluate_condition(notification: Notification, condition: RuleCondition) -> 
     except Exception:
         return False
 
-def apply_rules(notification: Notification) -> Notification:
+def apply_rules(notification: Notification, db: Session) -> Notification:
     """Apply all enabled rules to a notification"""
-    for rule in rules_db:
-        if not rule.enabled:
-            continue
-
+    rules = db.query(DBNotificationRule).filter(DBNotificationRule.enabled == True).all()
+    
+    for db_rule in rules:
+        # Convert DB rule to Pydantic model for evaluation
+        rule = NotificationRule(
+            id=db_rule.id,
+            name=db_rule.name,
+            description=db_rule.description,
+            enabled=db_rule.enabled,
+            conditions=[RuleCondition(**c) for c in db_rule.conditions],
+            actions=db_rule.actions,
+            created_at=db_rule.created_at.isoformat() if db_rule.created_at else None
+        )
+        
         # Check if all conditions match
         all_conditions_match = all(
             evaluate_condition(notification, condition)
@@ -125,41 +158,80 @@ async def get_notifications(
     source: Optional[str] = None,
     priority: Optional[str] = None,
     type: Optional[str] = None,
-    limit: int = 100
+    limit: int = 100,
+    db: Session = Depends(get_db)
 ):
     """Get all notifications with optional filtering"""
-    filtered_notifications = notifications_db.copy()
+    query = db.query(DBNotification)
 
     # Apply filters
     if status:
-        filtered_notifications = [n for n in filtered_notifications if n.status == status]
+        query = query.filter(DBNotification.status == status)
     if source:
-        filtered_notifications = [n for n in filtered_notifications if n.source == source]
+        query = query.filter(DBNotification.source == source)
     if priority:
-        filtered_notifications = [n for n in filtered_notifications if n.priority == priority]
+        query = query.filter(DBNotification.priority == priority)
     if type:
-        filtered_notifications = [n for n in filtered_notifications if n.type == type]
+        query = query.filter(DBNotification.type == type)
 
     # Sort by created_at (newest first) and limit
-    filtered_notifications.sort(key=lambda x: x.created_at or "", reverse=True)
-    return filtered_notifications[:limit]
+    notifications = query.order_by(DBNotification.created_at.desc()).limit(limit).all()
+    
+    return [{
+        "id": n.id,
+        "title": n.title,
+        "description": n.description,
+        "source": n.source,
+        "priority": n.priority,
+        "type": n.type,
+        "status": n.status,
+        "url": n.url,
+        "metadata": n.notification_metadata,
+        "created_at": n.created_at.isoformat() if n.created_at else None
+    } for n in notifications]
 
-@router.post("/notifications", response_model=Notification)
-async def create_notification(notification: Notification):
+@router.post("/notifications", response_model=Dict[str, Any])
+async def create_notification(notification: Notification, db: Session = Depends(get_db)):
     """Create a new notification"""
     notification.id = str(uuid.uuid4())
     notification.created_at = datetime.utcnow().isoformat()
 
     # Apply rules before saving
-    notification = apply_rules(notification)
+    notification = apply_rules(notification, db)
 
-    notifications_db.append(notification)
-    return notification
+    db_notification = DBNotification(
+        id=notification.id,
+        title=notification.title,
+        description=notification.description,
+        source=notification.source,
+        priority=notification.priority,
+        type=notification.type,
+        status=notification.status,
+        url=notification.url,
+        metadata=notification.notification_metadata or {},
+        created_at=datetime.utcnow()
+    )
+    db.add(db_notification)
+    db.commit()
+    db.refresh(db_notification)
+    
+    return {
+        "id": db_notification.id,
+        "title": db_notification.title,
+        "description": db_notification.description,
+        "source": db_notification.source,
+        "priority": db_notification.priority,
+        "type": db_notification.type,
+        "status": db_notification.status,
+        "url": db_notification.url,
+        "metadata": db_notification.notification_metadata,
+        "created_at": db_notification.created_at.isoformat() if db_notification.created_at else None
+    }
 
-@router.put("/notifications/{notification_id}", response_model=Notification)
-async def update_notification(notification_id: str, update: NotificationUpdate):
+@router.put("/notifications/{notification_id}")
+async def update_notification(notification_id: str, update: NotificationUpdate, db: Session = Depends(get_db)):
     """Update a notification (e.g., mark as read)"""
-    notification = next((n for n in notifications_db if n.id == notification_id), None)
+    notification = db.query(DBNotification).filter(DBNotification.id == notification_id).first()
 
     if not notification:
         raise HTTPException(status_code=404, detail="Notification not found")
@@ -169,61 +241,102 @@ async def update_notification(notification_id: str, update: NotificationUpdate):
     if update.priority:
         notification.priority = update.priority
 
-    return notification
+    db.commit()
+    db.refresh(notification)
+    
+    return {
+        "id": notification.id,
+        "title": notification.title,
+        "description": notification.description,
+        "source": notification.source,
+        "priority": notification.priority,
+        "type": notification.type,
+        "status": notification.status,
+        "url": notification.url,
+        "metadata": notification.notification_metadata,
+        "created_at": notification.created_at.isoformat() if notification.created_at else None
+    }
 
 @router.delete("/notifications/{notification_id}")
-async def delete_notification(notification_id: str):
+async def delete_notification(notification_id: str, db: Session = Depends(get_db)):
     """Delete a notification"""
-    global notifications_db
-    notification = next((n for n in notifications_db if n.id == notification_id), None)
+    notification = db.query(DBNotification).filter(DBNotification.id == notification_id).first()
 
     if not notification:
         raise HTTPException(status_code=404, detail="Notification not found")
 
-    notifications_db = [n for n in notifications_db if n.id != notification_id]
+    db.delete(notification)
+    db.commit()
     return {"message": "Notification deleted"}
 
 @router.get("/notifications/unread-count")
-async def get_unread_count():
+async def get_unread_count(db: Session = Depends(get_db)):
     """Get count of unread notifications"""
-    unread_count = len([n for n in notifications_db if n.status == NotificationStatus.UNREAD])
+    unread_count = db.query(DBNotification).filter(DBNotification.status == "unread").count()
     return {"count": unread_count}
 
 @router.post("/notifications/mark-all-read")
-async def mark_all_read():
+async def mark_all_read(db: Session = Depends(get_db)):
     """Mark all notifications as read"""
-    for notification in notifications_db:
-        if notification.status == NotificationStatus.UNREAD:
-            notification.status = NotificationStatus.READ
+    db.query(DBNotification).filter(DBNotification.status == "unread").update({"status": "read"})
+    db.commit()
     return {"message": "All notifications marked as read"}
 
 @router.post("/notifications/clear-read")
-async def clear_read():
+async def clear_read(db: Session = Depends(get_db)):
     """Clear all read notifications"""
-    global notifications_db
-    before_count = len(notifications_db)
-    notifications_db = [n for n in notifications_db if n.status != NotificationStatus.READ]
-    cleared_count = before_count - len(notifications_db)
-    return {"message": f"Cleared {cleared_count} read notifications"}
+    deleted_count = db.query(DBNotification).filter(DBNotification.status == "read").delete()
+    db.commit()
+    return {"message": f"Cleared {deleted_count} read notifications"}
 
 # Rule Endpoints
 @router.get("/rules")
-async def get_rules():
+async def get_rules(db: Session = Depends(get_db)):
     """Get all notification rules"""
-    return rules_db
+    rules = db.query(DBNotificationRule).all()
+    return [{
+        "id": r.id,
+        "name": r.name,
+        "description": r.description,
+        "enabled": r.enabled,
+        "conditions": r.conditions,
+        "actions": r.actions,
+        "created_at": r.created_at.isoformat() if r.created_at else None
+    } for r in rules]
 
-@router.post("/rules", response_model=NotificationRule)
-async def create_rule(rule: NotificationRule):
+@router.post("/rules")
+async def create_rule(rule: NotificationRule, db: Session = Depends(get_db)):
     """Create a new notification rule"""
     rule.id = str(uuid.uuid4())
     rule.created_at = datetime.utcnow().isoformat()
-    rules_db.append(rule)
-    return rule
+    
+    db_rule = DBNotificationRule(
+        id=rule.id,
+        name=rule.name,
+        description=rule.description,
+        enabled=rule.enabled,
+        conditions=[c.dict() for c in rule.conditions],
+        actions=rule.actions,
+        created_at=datetime.utcnow()
+    )
+    db.add(db_rule)
+    db.commit()
+    db.refresh(db_rule)
+    
+    return {
+        "id": db_rule.id,
+        "name": db_rule.name,
+        "description": db_rule.description,
+        "enabled": db_rule.enabled,
+        "conditions": db_rule.conditions,
+        "actions": db_rule.actions,
+        "created_at": db_rule.created_at.isoformat() if db_rule.created_at else None
+    }
 
-@router.put("/rules/{rule_id}", response_model=NotificationRule)
-async def update_rule(rule_id: str, updated_rule: NotificationRule):
+@router.put("/rules/{rule_id}")
+async def update_rule(rule_id: str, updated_rule: NotificationRule, db: Session = Depends(get_db)):
     """Update a notification rule"""
-    rule = next((r for r in rules_db if r.id == rule_id), None)
+    rule = db.query(DBNotificationRule).filter(DBNotificationRule.id == rule_id).first()
 
     if not rule:
         raise HTTPException(status_code=404, detail="Rule not found")
@@ -231,21 +344,32 @@ async def update_rule(rule_id: str, updated_rule: NotificationRule):
     rule.name = updated_rule.name
     rule.description = updated_rule.description
     rule.enabled = updated_rule.enabled
-    rule.conditions = updated_rule.conditions
+    rule.conditions = [c.dict() for c in updated_rule.conditions]
     rule.actions = updated_rule.actions
 
-    return rule
+    db.commit()
+    db.refresh(rule)
+    
+    return {
+        "id": rule.id,
+        "name": rule.name,
+        "description": rule.description,
+        "enabled": rule.enabled,
+        "conditions": rule.conditions,
+        "actions": rule.actions,
+        "created_at": rule.created_at.isoformat() if rule.created_at else None
+    }
 
 @router.delete("/rules/{rule_id}")
-async def delete_rule(rule_id: str):
+async def delete_rule(rule_id: str, db: Session = Depends(get_db)):
     """Delete a notification rule"""
-    global rules_db
-    rule = next((r for r in rules_db if r.id == rule_id), None)
+    rule = db.query(DBNotificationRule).filter(DBNotificationRule.id == rule_id).first()
 
     if not rule:
         raise HTTPException(status_code=404, detail="Rule not found")
 
-    rules_db = [r for r in rules_db if r.id != rule_id]
+    db.delete(rule)
+    db.commit()
     return {"message": "Rule deleted"}
 
 # BitBucket Integration
@@ -376,10 +500,12 @@ async def get_commands():
     }
 
 @router.get("/health")
-async def health_check():
+async def health_check(db: Session = Depends(get_db)):
     """Health check endpoint"""
+    notifications_count = db.query(DBNotification).count()
+    rules_count = db.query(DBNotificationRule).count()
     return {
         "status": "healthy",
-        "notifications_count": len(notifications_db),
-        "rules_count": len(rules_db)
+        "notifications_count": notifications_count,
+        "rules_count": rules_count
     }
