@@ -23,7 +23,6 @@ htmlcov/
 
 # Plugin state (runtime data)
 plugin_state.json
-superdashboard.db
 
 # Node.js
 node_modules/

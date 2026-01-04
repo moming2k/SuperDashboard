@@ -1,19 +1,20 @@
 """
 Database module for SuperDashboard
-Handles plugin order persistence using SQLite
+Handles plugin order persistence using PostgreSQL
 """
 import os
 from sqlalchemy import create_engine, Column, String, Integer
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
+from dotenv import load_dotenv
 
-# Database file location
-DB_DIR = os.path.dirname(__file__)
-DB_FILE = os.path.join(DB_DIR, "superdashboard.db")
-DATABASE_URL = f"sqlite:///{DB_FILE}"
+load_dotenv()
 
-# Create engine
-engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
+# Get database URL from environment variable
+DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/superdashboard")
+
+# Create engine for PostgreSQL
+engine = create_engine(DATABASE_URL, echo=False)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
@@ -29,7 +30,7 @@ class PluginOrder(Base):
 def init_db():
     """Initialize database tables"""
     Base.metadata.create_all(bind=engine)
-    print(f"Database initialized at {DB_FILE}")
+    print(f"✅ Plugin order table initialized in PostgreSQL database")
 
 
 def get_db():
