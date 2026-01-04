@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
-
-const API_BASE = 'http://localhost:8000';
+import { API_BASE } from '../../../frontend/src/config';
 
 function CodeReview() {
   const [activeView, setActiveView] = useState('review');

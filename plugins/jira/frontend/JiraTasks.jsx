@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
-
-const API_BASE = 'http://localhost:8000';
+import { API_BASE } from '../../../frontend/src/config';
 
 export default function JiraTasks() {
     const [jiraIssues, setJiraIssues] = useState([]);
