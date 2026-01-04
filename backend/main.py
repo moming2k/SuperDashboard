@@ -18,6 +18,15 @@ import services
 # Import OpenAI
 from openai import OpenAI
 
+# Import logging
+from logger import (
+    app_logger,
+    log_startup,
+    log_plugin_loaded,
+    log_plugin_failed,
+    log_plugin_disabled
+)
+
 # Validate configuration at startup
 validate_startup_config()
 
@@ -86,7 +95,7 @@ def load_plugin_from_path(plugin_path: str, plugin_name: str, is_core: bool = Fa
     if db:
         # Check if plugin is enabled
         if not services.is_plugin_enabled(db, plugin_name, is_core):
-            print(f"Plugin {plugin_name} is disabled, skipping load")
+            log_plugin_disabled(plugin_name)
             return
 
     # Check for legacy structure (main.py) or new structure (backend/main.py)
@@ -107,9 +116,9 @@ def load_plugin_from_path(plugin_path: str, plugin_name: str, is_core: bool = Fa
 
             if hasattr(module, "router"):
                 app.include_router(module.router, prefix=f"/plugins/{plugin_name}", tags=[plugin_name])
-                print(f"✅ Loaded plugin: {plugin_name} from {target_path}")
+                log_plugin_loaded(plugin_name, target_path)
         except Exception as e:
-            print(f"❌ Failed to load plugin {plugin_name}: {e}")
+            log_plugin_failed(plugin_name, str(e))
 
 def load_plugins():
     """Load all plugins from plugins directory"""

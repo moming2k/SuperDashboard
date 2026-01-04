@@ -8,6 +8,7 @@ from sqlalchemy import create_engine, Column, String, Integer, Text, Boolean, Da
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 from dotenv import load_dotenv
+from logger import log_db_initialized
 
 load_dotenv()
 
@@ -78,7 +79,7 @@ class SystemConfig(Base):
 def init_db():
     """Initialize all database tables"""
     Base.metadata.create_all(bind=engine)
-    print(f"✅ Database tables initialized in PostgreSQL")
+    log_db_initialized()
 
 
 def get_db():

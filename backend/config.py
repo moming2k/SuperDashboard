@@ -6,6 +6,7 @@ import os
 import sys
 from typing import Optional
 from dotenv import load_dotenv
+from logger import config_logger, log_config_validated, log_config_error, log_config_warning
 
 # Load environment variables
 load_dotenv()
@@ -92,27 +93,24 @@ def validate_startup_config():
     is_valid, errors = config.validate()
 
     if not is_valid:
-        print("❌ Configuration validation failed!")
-        print("\nErrors:")
+        config_logger.critical("Configuration validation failed!")
+        config_logger.critical("Errors:")
         for error in errors:
-            print(f"  - {error}")
-        print("\nPlease check your .env file and ensure all required variables are set.")
-        print("See backend/.env.example for reference.")
+            log_config_error(error)
+        config_logger.critical("Please check your .env file and ensure all required variables are set.")
+        config_logger.critical("See backend/.env.example for reference.")
         sys.exit(1)
 
-    # Print warnings
+    # Log warnings
     warnings = config.get_warnings()
     if warnings:
-        print("⚠️  Configuration warnings:")
         for warning in warnings:
-            print(f"  - {warning}")
-        print()
+            log_config_warning(warning)
 
-    print(f"✅ Configuration validated successfully")
-    print(f"   - Database: {config.database_url.split('@')[-1] if '@' in config.database_url else config.database_url}")
-    print(f"   - CORS Origins: {config.allowed_origins}")
-    print(f"   - Server: {config.host}:{config.port}")
-    print()
+    log_config_validated()
+    config_logger.info(f"Database: {config.database_url.split('@')[-1] if '@' in config.database_url else config.database_url}")
+    config_logger.info(f"CORS Origins: {config.allowed_origins}")
+    config_logger.info(f"Server: {config.host}:{config.port}")
 
 
 if __name__ == "__main__":
