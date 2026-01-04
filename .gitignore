@@ -7,9 +7,14 @@ Thumbs.db
 .env.local
 .env.*.local
 *.env
+
+# Virtual environments (Python)
 venv/
 .venv/
 env/
+ENV/
+backend/.venv/
+backend/venv/
 
 # Python
 __pycache__/

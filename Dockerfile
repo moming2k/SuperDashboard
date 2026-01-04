@@ -1,5 +1,6 @@
-# SuperDashboard Dockerfile - Multi-stage build with uv
+# SuperDashboard Dockerfile - Multi-stage build with uv and .venv isolation
 # Uses uv for fast, reliable Python package installation
+# Uses .venv for complete isolation from system Python
 # Build: docker build -t superdashboard:latest .
 # Run: docker run -p 8000:8000 --env-file backend/.env superdashboard:latest
 
@@ -19,7 +20,8 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 # Set environment variables
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
-    UV_SYSTEM_PYTHON=1
+    # Don't use system Python - force .venv usage
+    UV_PROJECT_ENVIRONMENT=/app/backend/.venv
 
 WORKDIR /app
 
@@ -27,19 +29,24 @@ WORKDIR /app
 FROM base as dependencies
 
 # Copy dependency files
-COPY backend/pyproject.toml backend/requirements.txt ./
+COPY backend/pyproject.toml ./backend/
 
-# Install Python dependencies using uv (much faster than pip)
-RUN uv pip install --system -r requirements.txt
+WORKDIR /app/backend
+
+# Create virtual environment with uv (isolated from system)
+RUN uv venv .venv
+
+# Install Python dependencies from pyproject.toml using uv (much faster than pip)
+RUN uv pip install --python .venv/bin/python .
 
 # ==================== Build Stage ====================
 FROM dependencies as build
 
 # Copy backend code
-COPY backend/ ./backend/
+COPY backend/ ./
 
 # Copy plugins
-COPY plugins/ ./plugins/
+COPY plugins/ /app/plugins/
 
 # ==================== Runtime Stage ====================
 FROM python:3.12-slim as runtime
@@ -53,17 +60,22 @@ RUN apt-get update && apt-get install -y \
 # Create non-root user for security
 RUN useradd -m -u 1000 appuser
 
-WORKDIR /app
+WORKDIR /app/backend
 
-# Copy Python packages from dependencies stage
-COPY --from=dependencies /usr/local/lib/python3.12/site-packages /usr/local/lib/python3.12/site-packages
-COPY --from=dependencies /usr/local/bin /usr/local/bin
+# Copy virtual environment from dependencies stage (fully isolated)
+COPY --from=dependencies --chown=appuser:appuser /app/backend/.venv /app/backend/.venv
 
 # Copy application code
-COPY --from=build --chown=appuser:appuser /app /app
+COPY --from=build --chown=appuser:appuser /app/backend /app/backend
+COPY --from=build --chown=appuser:appuser /app/plugins /app/plugins
 
 # Switch to non-root user
 USER appuser
+
+# Set environment variables
+ENV PATH="/app/backend/.venv/bin:$PATH" \
+    PYTHONUNBUFFERED=1 \
+    VIRTUAL_ENV="/app/backend/.venv"
 
 # Expose port
 EXPOSE 8000
@@ -72,8 +84,5 @@ EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
     CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"
 
-# Set working directory to backend
-WORKDIR /app/backend
-
-# Run the application
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Run the application using Python from .venv
+CMD ["python", "main.py"]

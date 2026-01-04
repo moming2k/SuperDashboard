@@ -56,7 +56,7 @@
         }
     },
     // Use 'postCreateCommand' to run commands after the container is created.
-    "postCreateCommand": "sudo chown -R vscode:vscode /workspace/frontend/node_modules /workspace/backend/venv && cd backend && uv pip install --system -r requirements.txt && cd ../frontend && npm install",
+    "postCreateCommand": "sudo chown -R vscode:vscode /workspace/frontend/node_modules /workspace/backend/.venv && cd backend && uv venv .venv && uv pip install --python .venv/bin/python -e . && cd ../frontend && npm install",
     // Fix SSH permissions, set up Claude directory, and start servers after container starts
     "postStartCommand": "chmod 700 ~/.ssh 2>/dev/null || true && chmod 600 ~/.ssh/id_* 2>/dev/null || true && chmod 644 ~/.ssh/*.pub 2>/dev/null || true && mkdir -p ~/.claude && cp ~/.claude-credentials.json ~/.claude/.credentials.json 2>/dev/null || true && chmod 700 ~/.claude && chmod 600 ~/.claude/.credentials.json 2>/dev/null || true && /workspace/.devcontainer/start-servers.sh",
     // Comment out to connect as root instead. More info: https://aka.ms/vscode-remote/containers/non-root.
