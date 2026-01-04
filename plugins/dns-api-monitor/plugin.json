@@ -1,0 +1,14 @@
+{
+  "name": "dns-api-monitor",
+  "displayName": "DNS & API Monitor",
+  "description": "Monitor DNS CNAME changes and API endpoint responses",
+  "version": "1.0.0",
+  "tab": {
+    "label": "Monitoring",
+    "icon": "📡",
+    "order": 25
+  },
+  "frontendComponent": "MonitorDashboard",
+  "icon": "📡",
+  "category": "monitoring"
+}
