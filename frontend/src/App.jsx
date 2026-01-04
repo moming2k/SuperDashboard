@@ -1,5 +1,21 @@
 import React, { useState, useEffect, Suspense, lazy } from 'react';
 import Toast from './components/Toast';
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+} from '@dnd-kit/core';
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 
 // Detect if running in devcontainer and use appropriate backend port
 const isDevContainer = import.meta.env.VITE_DEVCONTAINER === 'true';
@@ -43,6 +59,101 @@ const PluginComponent = ({ plugin, props }) => {
         <Component {...props} />
       </Suspense>
     </ErrorBoundary>
+  );
+};
+
+const SortablePluginItem = ({ plugin, togglePlugin, openConfigModal }) => {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: plugin.name });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+  };
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className="bg-bg-card backdrop-blur-xl border border-glass-border rounded-[24px] p-6 shadow-2xl transition-all hover:border-primary"
+    >
+      <div className="flex items-center gap-4">
+        {/* Drag Handle */}
+        <div
+          {...attributes}
+          {...listeners}
+          className="cursor-grab active:cursor-grabbing text-text-muted hover:text-text-main transition-colors"
+        >
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            className="h-6 w-6"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M4 8h16M4 16h16"
+            />
+          </svg>
+        </div>
+
+        {/* Plugin Icon */}
+        <span className="text-3xl">{plugin.manifest?.tab?.icon || '🧩'}</span>
+
+        {/* Plugin Info */}
+        <div className="flex-1">
+          <div className="flex items-center gap-2">
+            <h3 className="text-xl font-bold">{plugin.manifest?.displayName || plugin.name}</h3>
+            {plugin.isCore && (
+              <span className="text-xs bg-primary/20 text-primary px-2 py-0.5 rounded-full">CORE</span>
+            )}
+          </div>
+          <p className="text-text-muted text-xs">v{plugin.manifest?.version || '1.0.0'}</p>
+          {plugin.manifest?.description && (
+            <p className="text-text-muted text-sm mt-2">{plugin.manifest.description}</p>
+          )}
+        </div>
+
+        {/* Status Indicator */}
+        <div className="flex items-center gap-2">
+          <div className={`w-2 h-2 rounded-full ${plugin.enabled ? 'bg-green-400' : 'bg-gray-400'}`}></div>
+          <p className="text-text-muted text-sm uppercase tracking-wider">{plugin.status}</p>
+        </div>
+
+        {/* Action Buttons */}
+        <div className="flex gap-2">
+          <button
+            onClick={() => togglePlugin(plugin.name, plugin.enabled)}
+            disabled={plugin.isCore}
+            className={`p-2 px-4 rounded-xl font-semibold text-sm transition-all duration-300 ${
+              plugin.isCore
+                ? 'bg-gray-600/30 text-gray-500 cursor-not-allowed'
+                : plugin.enabled
+                  ? 'bg-red-500/20 text-red-400 hover:bg-red-500/30 border border-red-500/30'
+                  : 'bg-green-500/20 text-green-400 hover:bg-green-500/30 border border-green-500/30'
+            }`}
+          >
+            {plugin.enabled ? 'Disable' : 'Enable'}
+          </button>
+          <button
+            onClick={() => openConfigModal(plugin)}
+            className="p-2 px-4 rounded-xl font-semibold text-sm bg-primary/20 text-primary hover:bg-primary/30 border border-primary/30 transition-all duration-300"
+          >
+            ⚙️ Config
+          </button>
+        </div>
+      </div>
+    </div>
   );
 };
 
@@ -142,6 +253,56 @@ function App() {
       setToast({ message: 'Failed to save plugin configuration', type: 'error' });
     }
   };
+
+  const savePluginOrder = async (orderedPlugins) => {
+    try {
+      const orders = orderedPlugins.map((plugin, index) => ({
+        plugin_name: plugin.name,
+        order_index: index
+      }));
+
+      const res = await fetch(`${API_BASE}/plugins/reorder`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ orders })
+      });
+
+      if (res.ok) {
+        setToast({ message: 'Plugin order saved successfully!', type: 'success' });
+      } else {
+        const data = await res.json();
+        setToast({ message: `Error: ${data.detail || 'Failed to save order'}`, type: 'error' });
+      }
+    } catch (e) {
+      console.error("Failed to save plugin order", e);
+      setToast({ message: 'Failed to save plugin order', type: 'error' });
+    }
+  };
+
+  const handleDragEnd = (event) => {
+    const { active, over } = event;
+
+    if (over && active.id !== over.id) {
+      setPlugins((items) => {
+        const oldIndex = items.findIndex((item) => item.name === active.id);
+        const newIndex = items.findIndex((item) => item.name === over.id);
+
+        const newOrder = arrayMove(items, oldIndex, newIndex);
+
+        // Save the new order to the backend
+        savePluginOrder(newOrder);
+
+        return newOrder;
+      });
+    }
+  };
+
+  const sensors = useSensors(
+    useSensor(PointerSensor),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  );
 
   useEffect(() => {
     fetchPlugins();
@@ -279,53 +440,35 @@ function App() {
       <div className="flex-1 p-8 overflow-y-auto">
         {activeTab === 'plugins' ? (
           <div className="animate-fade">
-            <h1 className="text-3xl font-bold mb-8">Plugin Registry</h1>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-              {plugins.length === 0 && <p className="text-text-muted">No plugins detected.</p>}
-              {plugins.map(plugin => (
-                <div key={plugin.name} className="bg-bg-card backdrop-blur-xl border border-glass-border rounded-[24px] p-8 shadow-2xl transition-all hover:border-primary">
-                  <div className="flex items-center gap-3 mb-4">
-                    <span className="text-3xl">{plugin.manifest?.tab?.icon || '🧩'}</span>
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2">
-                        <h3 className="text-xl font-bold">{plugin.manifest?.displayName || plugin.name}</h3>
-                        {plugin.isCore && (
-                          <span className="text-xs bg-primary/20 text-primary px-2 py-0.5 rounded-full">CORE</span>
-                        )}
-                      </div>
-                      <p className="text-text-muted text-xs">v{plugin.manifest?.version || '1.0.0'}</p>
-                    </div>
-                  </div>
-                  {plugin.manifest?.description && (
-                    <p className="text-text-muted text-sm mb-4">{plugin.manifest.description}</p>
-                  )}
-                  <div className="flex items-center gap-2 mb-4">
-                    <div className={`w-2 h-2 rounded-full ${plugin.enabled ? 'bg-green-400' : 'bg-gray-400'}`}></div>
-                    <p className="text-text-muted text-sm uppercase tracking-wider">{plugin.status}</p>
-                  </div>
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => togglePlugin(plugin.name, plugin.enabled)}
-                      disabled={plugin.isCore}
-                      className={`flex-1 p-2 px-4 rounded-xl font-semibold text-sm transition-all duration-300 ${plugin.isCore
-                        ? 'bg-gray-600/30 text-gray-500 cursor-not-allowed'
-                        : plugin.enabled
-                          ? 'bg-red-500/20 text-red-400 hover:bg-red-500/30 border border-red-500/30'
-                          : 'bg-green-500/20 text-green-400 hover:bg-green-500/30 border border-green-500/30'
-                        }`}
-                    >
-                      {plugin.enabled ? 'Disable' : 'Enable'}
-                    </button>
-                    <button
-                      onClick={() => openConfigModal(plugin)}
-                      className="p-2 px-4 rounded-xl font-semibold text-sm bg-primary/20 text-primary hover:bg-primary/30 border border-primary/30 transition-all duration-300"
-                    >
-                      ⚙️ Config
-                    </button>
-                  </div>
-                </div>
-              ))}
+            <div className="flex items-center justify-between mb-8">
+              <h1 className="text-3xl font-bold">Plugin Registry</h1>
+              <p className="text-text-muted text-sm">Drag and drop to reorder plugins</p>
             </div>
+            {plugins.length === 0 ? (
+              <p className="text-text-muted">No plugins detected.</p>
+            ) : (
+              <DndContext
+                sensors={sensors}
+                collisionDetection={closestCenter}
+                onDragEnd={handleDragEnd}
+              >
+                <SortableContext
+                  items={plugins.map(p => p.name)}
+                  strategy={verticalListSortingStrategy}
+                >
+                  <div className="flex flex-col gap-4">
+                    {plugins.map(plugin => (
+                      <SortablePluginItem
+                        key={plugin.name}
+                        plugin={plugin}
+                        togglePlugin={togglePlugin}
+                        openConfigModal={openConfigModal}
+                      />
+                    ))}
+                  </div>
+                </SortableContext>
+              </DndContext>
+            )}
           </div>
         ) : (
           activePlugin && <PluginComponent plugin={activePlugin} />
