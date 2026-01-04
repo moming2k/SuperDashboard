@@ -177,14 +177,12 @@ export default function WhatsAppChat() {
                 </div>
                 <div className="flex gap-4 items-center">
                     {healthStatus && (
-                        <div className={`flex items-center gap-2 px-3 py-1 rounded-lg text-xs font-bold ${
-                            healthStatus.configured
+                        <div className={`flex items-center gap-2 px-3 py-1 rounded-lg text-xs font-bold ${healthStatus.configured
                                 ? 'bg-green-500/20 text-green-400'
                                 : 'bg-amber-500/20 text-amber-400'
-                        }`}>
-                            <div className={`w-2 h-2 rounded-full ${
-                                healthStatus.configured ? 'bg-green-400 animate-pulse' : 'bg-amber-400'
-                            }`}></div>
+                            }`}>
+                            <div className={`w-2 h-2 rounded-full ${healthStatus.configured ? 'bg-green-400 animate-pulse' : 'bg-amber-400'
+                                }`}></div>
                             {healthStatus.configured ? 'Connected' : 'Not Configured'}
                         </div>
                     )}
@@ -267,11 +265,10 @@ export default function WhatsAppChat() {
                             <div
                                 key={conv.phone_number}
                                 onClick={() => selectConversation(conv)}
-                                className={`p-4 border-b border-glass-border/30 cursor-pointer transition-all hover:bg-glass/20 ${
-                                    selectedConversation?.phone_number === conv.phone_number
+                                className={`p-4 border-b border-glass-border/30 cursor-pointer transition-all hover:bg-glass/20 ${selectedConversation?.phone_number === conv.phone_number
                                         ? 'bg-glass/30 border-l-4 border-l-primary'
                                         : ''
-                                }`}
+                                    }`}
                             >
                                 <div className="flex justify-between items-start mb-1">
                                     <span className="font-bold text-sm">{formatPhoneNumber(conv.phone_number)}</span>
@@ -304,9 +301,9 @@ export default function WhatsAppChat() {
                                 <p className="text-text-muted mb-6">Enter a phone number to send a WhatsApp message</p>
                                 <input
                                     type="text"
-                                    placeholder="Phone number (e.g., 1234567890)"
+                                    placeholder="Phone number (e.g., +1234567890)"
                                     value={newRecipient}
-                                    onChange={(e) => setNewRecipient(e.target.value.replace(/[^0-9]/g, ''))}
+                                    onChange={(e) => setNewRecipient(e.target.value.replace(/[^0-9+]/g, ''))}
                                     className="bg-bg-dark/50 border border-glass-border rounded-xl p-3 text-white w-full max-w-md outline-none focus:border-primary transition-colors mb-4"
                                 />
                                 <button
@@ -360,11 +357,10 @@ export default function WhatsAppChat() {
                                             className={`flex ${isOutgoing ? 'justify-end' : 'justify-start'}`}
                                         >
                                             <div
-                                                className={`max-w-[70%] rounded-2xl p-4 ${
-                                                    isOutgoing
+                                                className={`max-w-[70%] rounded-2xl p-4 ${isOutgoing
                                                         ? 'bg-primary text-white rounded-br-sm'
                                                         : 'bg-glass border border-glass-border text-text-main rounded-bl-sm'
-                                                }`}
+                                                    }`}
                                             >
                                                 <p className="text-sm break-words whitespace-pre-wrap">{msg.body}</p>
                                                 <div className="flex items-center gap-2 mt-2">

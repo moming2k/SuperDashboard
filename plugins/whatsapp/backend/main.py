@@ -93,8 +93,9 @@ async def send_whatsapp_message(request: SendMessageRequest, db: Session = Depen
 
         client = Client(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
 
-        # Format phone number for WhatsApp
-        to_number = f"whatsapp:+{request.to}" if not request.to.startswith("whatsapp:") else request.to
+        # Format phone number for WhatsApp - strip existing + to avoid double ++
+        phone_clean = request.to.lstrip('+')
+        to_number = f"whatsapp:+{phone_clean}" if not request.to.startswith("whatsapp:") else request.to
 
         # Send message via Twilio
         message = client.messages.create(
@@ -281,8 +282,9 @@ async def get_messages(phone_number: Optional[str] = None, limit: int = 100, db:
     query = db.query(WhatsAppMessageModel)
     
     if phone_number:
-        # Format phone number for filtering
-        formatted_phone = f"whatsapp:+{phone_number}" if not phone_number.startswith("whatsapp:") else phone_number
+        # Format phone number for filtering - strip existing + to avoid double ++
+        phone_clean = phone_number.lstrip('+')
+        formatted_phone = f"whatsapp:+{phone_clean}" if not phone_number.startswith("whatsapp:") else phone_number
         query = query.filter(
             or_(
                 WhatsAppMessageModel.from_number == formatted_phone,
