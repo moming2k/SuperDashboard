@@ -55,8 +55,8 @@ function SnippetManager() {
         e.preventDefault();
         document.getElementById('snippet-search')?.focus();
       }
-      // Ctrl/Cmd + N: New snippet
-      if ((e.ctrlKey || e.metaKey) && e.key === 'n') {
+      // Ctrl/Cmd + Shift + N: New snippet
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'N') {
         e.preventDefault();
         setShowCreateForm(true);
         setActiveTab('library');
@@ -365,31 +365,28 @@ function SnippetManager() {
         <div className="flex gap-2">
           <button
             onClick={() => setFilters({ ...filters, favorite: filters.favorite === true ? null : true })}
-            className={`px-4 py-2 rounded-xl transition-all ${
-              filters.favorite === true
+            className={`px-4 py-2 rounded-xl transition-all ${filters.favorite === true
                 ? 'bg-primary text-white'
                 : 'bg-bg-dark border border-glass-border text-text-main hover:border-primary'
-            }`}
+              }`}
           >
             ⭐ Favorites
           </button>
           <button
             onClick={() => setFilters({ ...filters, visibility: filters.visibility === 'team' ? '' : 'team' })}
-            className={`px-4 py-2 rounded-xl transition-all ${
-              filters.visibility === 'team'
+            className={`px-4 py-2 rounded-xl transition-all ${filters.visibility === 'team'
                 ? 'bg-primary text-white'
                 : 'bg-bg-dark border border-glass-border text-text-main hover:border-primary'
-            }`}
+              }`}
           >
             👥 Team
           </button>
           <button
             onClick={() => setFilters({ ...filters, visibility: filters.visibility === 'personal' ? '' : 'personal' })}
-            className={`px-4 py-2 rounded-xl transition-all ${
-              filters.visibility === 'personal'
+            className={`px-4 py-2 rounded-xl transition-all ${filters.visibility === 'personal'
                 ? 'bg-primary text-white'
                 : 'bg-bg-dark border border-glass-border text-text-main hover:border-primary'
-            }`}
+              }`}
           >
             👤 Personal
           </button>
@@ -726,7 +723,7 @@ function SnippetManager() {
       {/* Keyboard Shortcuts Help */}
       <div className="fixed bottom-4 right-4 bg-glass backdrop-blur-xl border border-glass-border rounded-xl p-3 text-xs text-text-muted">
         <div>⌘/Ctrl + K: Search</div>
-        <div>⌘/Ctrl + N: New Snippet</div>
+        <div>⌘/Ctrl + Shift + N: New Snippet</div>
         <div>Esc: Close</div>
       </div>
     </div>
