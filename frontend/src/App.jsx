@@ -155,8 +155,10 @@ function App() {
   // Get initial tab from URL hash (e.g., #dashboard, #jira, #plugins)
   const getInitialTab = () => {
     const hash = window.location.hash.slice(1); // Remove the '#'
+    // Extract base plugin name from paths like 'rss-reader/article/123'
+    const baseTab = hash.split('/')[0];
     // If no hash, default to 'dashboard' tab
-    return hash || 'dashboard';
+    return baseTab || 'dashboard';
   };
 
   const [activeTab, setActiveTab] = useState(getInitialTab());
@@ -313,8 +315,10 @@ function App() {
     // Listen for hash changes (browser back/forward buttons)
     const handleHashChange = () => {
       const hash = window.location.hash.slice(1);
-      if (hash && hash !== activeTab) {
-        setActiveTab(hash);
+      // Extract base plugin name from paths like 'rss-reader/article/123'
+      const baseTab = hash.split('/')[0];
+      if (baseTab && baseTab !== activeTab) {
+        setActiveTab(baseTab);
       }
     };
 

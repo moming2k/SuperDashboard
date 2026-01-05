@@ -233,7 +233,7 @@ async def fetch_all_feeds():
         db.close()
 
 
-async def generate_article_qa(article: Article, num_questions: int = 5) -> List[QAPair]:
+async def generate_article_qa(article: Article, num_questions: int = 5, language: str = "Traditional Chinese") -> List[QAPair]:
     """Generate suggested Q&A for an article using OpenAI"""
     if not OPENAI_API_KEY:
         raise HTTPException(status_code=400, detail="OpenAI API key not configured")
@@ -250,9 +250,11 @@ async def generate_article_qa(article: Article, num_questions: int = 5) -> List[
         elif article.description:
             article_text += f"Description: {article.description}"
 
-        prompt = f"""Based on this article, generate {num_questions} insightful questions and answers that would help a reader better understand the content. Focus on key concepts, implications, and practical applications.
+        prompt = f"""Based on this article, generate {num_questions} insightful questions and answers IN {language} that would help a reader better understand the content. Focus on key concepts, implications, and practical applications.
 
 {article_text}
+
+IMPORTANT: Generate all questions and answers in {language}.
 
 Format your response as a JSON array of objects with 'question' and 'answer' fields. Example:
 [
@@ -263,7 +265,7 @@ Format your response as a JSON array of objects with 'question' and 'answer' fie
         response = client.chat.completions.create(
             model="gpt-4",
             messages=[
-                {"role": "system", "content": "You are a helpful assistant that generates insightful questions and answers about articles to help readers understand the content better."},
+                {"role": "system", "content": f"You are a helpful assistant that generates insightful questions and answers about articles in {language} to help readers understand the content better. Always respond in {language}."},
                 {"role": "user", "content": prompt}
             ],
             temperature=0.7,
@@ -292,6 +294,7 @@ Format your response as a JSON array of objects with 'question' and 'answer' fie
     except Exception as e:
         print(f"❌ Error generating Q&A: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to generate Q&A: {str(e)}")
+
 
 
 async def answer_question(article: Article, question: str) -> str:
@@ -441,17 +444,28 @@ async def refresh_feed(feed_id: str, db: Session = Depends(get_db)):
 
 
 @router.get("/articles")
-async def get_articles(feed_id: Optional[str] = None, limit: int = 50, db: Session = Depends(get_db)):
-    """Get articles, optionally filtered by feed_id"""
+async def get_articles(feed_id: Optional[str] = None, limit: int = 50, offset: int = 0, db: Session = Depends(get_db)):
+    """Get articles, optionally filtered by feed_id, with pagination support"""
     query = db.query(ArticleModel)
     
     if feed_id:
         query = query.filter(ArticleModel.feed_id == feed_id)
     
-    # Sort by fetched_at (most recent first)
-    articles = query.order_by(ArticleModel.fetched_at.desc()).limit(limit).all()
+    # Get total count
+    total_count = query.count()
     
-    return [article.to_dict() for article in articles]
+    # Sort by published date (most recent first), fallback to fetched_at for articles without published date
+    # Limit to max 200 articles total
+    effective_limit = min(limit, 200 - offset) if offset < 200 else 0
+    articles = query.order_by(ArticleModel.published.desc().nullslast(), ArticleModel.fetched_at.desc()).offset(offset).limit(effective_limit).all()
+    
+    return {
+        "articles": [article.to_dict() for article in articles],
+        "total_count": total_count,
+        "offset": offset,
+        "limit": effective_limit,
+        "has_more": (offset + len(articles)) < min(total_count, 200)
+    }
 
 
 @router.get("/articles/{article_id}")
@@ -465,26 +479,29 @@ async def get_article(article_id: str, db: Session = Depends(get_db)):
 
 
 @router.get("/articles/{article_id}/qa")
-async def get_article_qa(article_id: str, regenerate: bool = False, db: Session = Depends(get_db)):
+async def get_article_qa(article_id: str, regenerate: bool = False, language: str = "Traditional Chinese", db: Session = Depends(get_db)):
     """Get or generate suggested Q&A for an article"""
     article_model = db.query(ArticleModel).filter(ArticleModel.id == article_id).first()
     if not article_model:
         raise HTTPException(status_code=404, detail="Article not found")
 
+    # Use language-specific cache key
+    cache_key = f"{article_id}_{language}"
+    
     # Check cache
-    if article_id in article_qa_cache and not regenerate:
-        return article_qa_cache[article_id]
+    if cache_key in article_qa_cache and not regenerate:
+        return article_qa_cache[cache_key]
 
     # Convert to Pydantic model for AI processing
     article = Article(**article_model.to_dict())
 
-    # Generate Q&A
-    qa_pairs = await generate_article_qa(article)
+    # Generate Q&A with specified language
+    qa_pairs = await generate_article_qa(article, language=language)
 
     # Cache the results
-    article_qa_cache[article_id] = [qa.dict() for qa in qa_pairs]
+    article_qa_cache[cache_key] = [qa.dict() for qa in qa_pairs]
 
-    return article_qa_cache[article_id]
+    return article_qa_cache[cache_key]
 
 
 @router.post("/articles/{article_id}/question")

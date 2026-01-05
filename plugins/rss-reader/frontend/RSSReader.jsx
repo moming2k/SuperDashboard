@@ -20,15 +20,47 @@ export default function RSSReader() {
     const [stats, setStats] = useState(null);
     const [selectedFeed, setSelectedFeed] = useState(null);
     const [feedToDelete, setFeedToDelete] = useState(null);
+    const [offset, setOffset] = useState(0);
+    const [hasMore, setHasMore] = useState(true);
+    const [isLoadingMore, setIsLoadingMore] = useState(false);
+    const [qaLanguage, setQaLanguage] = useState('Traditional Chinese');
+    const loadMoreRef = React.useRef(null);
+
+    // Load article from URL hash on mount
+    useEffect(() => {
+        const hash = window.location.hash;
+        const articleMatch = hash.match(/#rss-reader\/article\/([^/]+)/);
+        if (articleMatch) {
+            const articleId = articleMatch[1];
+            loadArticleById(articleId);
+        }
+    }, []);
+
+    // Handle browser back/forward navigation
+    useEffect(() => {
+        const handleHashChange = () => {
+            const hash = window.location.hash;
+            const articleMatch = hash.match(/#rss-reader\/article\/([^/]+)/);
+            if (articleMatch) {
+                const articleId = articleMatch[1];
+                loadArticleById(articleId);
+            } else if (hash === '#rss-reader') {
+                setSelectedArticle(null);
+            }
+        };
+
+        window.addEventListener('hashchange', handleHashChange);
+        return () => window.removeEventListener('hashchange', handleHashChange);
+    }, []);
 
     useEffect(() => {
         fetchFeeds();
-        fetchArticles();
+        fetchArticles(true); // Reset on mount
         fetchStats();
 
         // Poll for new articles every 60 seconds
         const interval = setInterval(() => {
-            fetchArticles();
+            fetchArticles(true); // Reset when polling
         }, 60000);
 
         return () => clearInterval(interval);
@@ -50,24 +82,60 @@ export default function RSSReader() {
         }
     };
 
-    const fetchArticles = async () => {
+    const fetchArticles = async (reset = false) => {
+        const currentOffset = reset ? 0 : offset;
+
+        if (!reset && !hasMore) return;
+        if (!reset && isLoadingMore) return;
+
+        if (!reset) setIsLoadingMore(true);
+
         try {
             const url = selectedFeed
-                ? `${API_BASE}/plugins/rss-reader/articles?feed_id=${selectedFeed}&limit=50`
-                : `${API_BASE}/plugins/rss-reader/articles?limit=50`;
+                ? `${API_BASE}/plugins/rss-reader/articles?feed_id=${selectedFeed}&limit=50&offset=${currentOffset}`
+                : `${API_BASE}/plugins/rss-reader/articles?limit=50&offset=${currentOffset}`;
             const res = await fetch(url);
             if (!res.ok) {
                 console.error("Failed to fetch articles:", res.status);
-                setArticles([]);
+                if (reset) setArticles([]);
                 return;
             }
             const data = await res.json();
-            setArticles(Array.isArray(data) ? data : []);
+
+            if (reset) {
+                setArticles(data.articles || []);
+                setOffset(data.articles?.length || 0);
+            } else {
+                setArticles(prev => [...prev, ...(data.articles || [])]);
+                setOffset(prev => prev + (data.articles?.length || 0));
+            }
+
+            setHasMore(data.has_more || false);
         } catch (e) {
             console.error("Failed to fetch articles", e);
-            setArticles([]);
+            if (reset) setArticles([]);
+        } finally {
+            if (!reset) setIsLoadingMore(false);
         }
     };
+
+    // Intersection Observer for infinite scroll
+    useEffect(() => {
+        if (!loadMoreRef.current) return;
+
+        const observer = new IntersectionObserver(
+            (entries) => {
+                if (entries[0].isIntersecting && hasMore && !isLoadingMore) {
+                    fetchArticles(false);
+                }
+            },
+            { threshold: 0.1 }
+        );
+
+        observer.observe(loadMoreRef.current);
+
+        return () => observer.disconnect();
+    }, [hasMore, isLoadingMore, offset, selectedFeed]);
 
     const fetchStats = async () => {
         try {
@@ -103,7 +171,7 @@ export default function RSSReader() {
             setNewFeedUrl('');
             setShowAddFeed(false);
             await fetchFeeds();
-            await fetchArticles();
+            await fetchArticles(true);
             await fetchStats();
         } catch (e) {
             console.error("Failed to add feed", e);
@@ -121,7 +189,7 @@ export default function RSSReader() {
 
             if (res.ok) {
                 await fetchFeeds();
-                await fetchArticles();
+                await fetchArticles(true);
                 await fetchStats();
                 if (selectedFeed === feedId) {
                     setSelectedFeed(null);
@@ -143,7 +211,7 @@ export default function RSSReader() {
                 const data = await res.json();
                 alert(`Refreshed! Found ${data.new_articles} new articles.`);
                 await fetchFeeds();
-                await fetchArticles();
+                await fetchArticles(true);
                 await fetchStats();
             }
         } catch (e) {
@@ -151,15 +219,34 @@ export default function RSSReader() {
         }
     };
 
-    const selectArticle = async (article) => {
+    const loadArticleById = async (articleId) => {
+        try {
+            const res = await fetch(`${API_BASE}/plugins/rss-reader/articles/${articleId}`);
+            if (!res.ok) {
+                console.error("Failed to load article:", res.status);
+                return;
+            }
+            const article = await res.json();
+            await selectArticle(article, false); // Don't update URL when loading from URL
+        } catch (e) {
+            console.error("Failed to load article by ID", e);
+        }
+    };
+
+    const selectArticle = async (article, updateUrl = true) => {
         setSelectedArticle(article);
         setQAHistory([]);
         setSuggestedQA([]);
 
-        // Load suggested Q&A
+        // Update URL hash with article ID
+        if (updateUrl) {
+            window.location.hash = `rss-reader/article/${article.id}`;
+        }
+
+        // Load suggested Q&A with selected language
         setIsLoadingQA(true);
         try {
-            const res = await fetch(`${API_BASE}/plugins/rss-reader/articles/${article.id}/qa`);
+            const res = await fetch(`${API_BASE}/plugins/rss-reader/articles/${article.id}/qa?language=${encodeURIComponent(qaLanguage)}`);
             const data = await res.json();
             setSuggestedQA(data);
         } catch (e) {
@@ -288,7 +375,11 @@ export default function RSSReader() {
                 <div className="col-span-3 bg-bg-card backdrop-blur-xl border border-glass-border rounded-2xl p-6 overflow-y-auto">
                     <h2 className="text-lg font-bold mb-4">Feeds</h2>
                     <div
-                        onClick={() => setSelectedFeed(null)}
+                        onClick={() => {
+                            setSelectedFeed(null);
+                            setOffset(0);
+                            setHasMore(true);
+                        }}
                         className={`p-3 rounded-xl cursor-pointer mb-2 transition-all ${!selectedFeed ? 'bg-glass border border-primary' : 'hover:bg-glass/50'
                             }`}
                     >
@@ -302,7 +393,11 @@ export default function RSSReader() {
                                 }`}
                         >
                             <div
-                                onClick={() => setSelectedFeed(feed.id)}
+                                onClick={() => {
+                                    setSelectedFeed(feed.id);
+                                    setOffset(0);
+                                    setHasMore(true);
+                                }}
                                 className="cursor-pointer"
                             >
                                 <div className="font-bold text-sm truncate">{feed.title}</div>
@@ -378,6 +473,25 @@ export default function RSSReader() {
                                     </div>
                                 </div>
                             ))}
+
+                            {/* Load More Trigger */}
+                            {hasMore && (
+                                <div ref={loadMoreRef} className="py-8 text-center">
+                                    {isLoadingMore ? (
+                                        <div className="text-text-muted">
+                                            <div className="animate-pulse">Loading more articles...</div>
+                                        </div>
+                                    ) : (
+                                        <div className="text-text-muted text-sm">Scroll for more</div>
+                                    )}
+                                </div>
+                            )}
+
+                            {!hasMore && articles.length > 0 && (
+                                <div className="py-8 text-center text-text-muted text-sm">
+                                    {articles.length >= 200 ? 'Showing first 200 articles' : 'No more articles'}
+                                </div>
+                            )}
                         </div>
                     </div>
                 ) : (
@@ -386,7 +500,10 @@ export default function RSSReader() {
                         {/* Article Header */}
                         <div className="p-6 border-b border-glass-border">
                             <button
-                                onClick={() => setSelectedArticle(null)}
+                                onClick={() => {
+                                    setSelectedArticle(null);
+                                    window.location.hash = 'rss-reader';
+                                }}
                                 className="text-primary hover:underline mb-4 text-sm"
                             >
                                 ← Back to Articles
@@ -419,9 +536,31 @@ export default function RSSReader() {
                                 )}
                             </div>
 
+
                             {/* Suggested Q&A */}
                             <div className="bg-glass border border-glass-border rounded-xl p-6">
-                                <h3 className="text-xl font-bold mb-4">💡 Suggested Questions & Answers</h3>
+                                <div className="flex items-center justify-between mb-4">
+                                    <h3 className="text-xl font-bold">💡 Suggested Questions & Answers</h3>
+                                    <div className="flex items-center gap-3">
+                                        <select
+                                            value={qaLanguage}
+                                            onChange={(e) => setQaLanguage(e.target.value)}
+                                            className="bg-bg-dark/50 border border-glass-border rounded-lg px-3 py-1.5 text-sm text-white outline-none focus:border-primary transition-colors"
+                                        >
+                                            <option value="Traditional Chinese">繁體中文</option>
+                                            <option value="English">English</option>
+                                            <option value="Simplified Chinese">简体中文</option>
+                                            <option value="Japanese">日本語</option>
+                                        </select>
+                                        <button
+                                            onClick={() => selectArticle(selectedArticle, false)}
+                                            disabled={isLoadingQA}
+                                            className="text-xs bg-primary/20 text-primary px-3 py-1.5 rounded-lg hover:bg-primary/30 transition-colors disabled:opacity-50"
+                                        >
+                                            🔄 Regenerate
+                                        </button>
+                                    </div>
+                                </div>
                                 {isLoadingQA && (
                                     <div className="text-center text-text-muted py-8">
                                         <div className="animate-pulse">Generating insights...</div>
@@ -439,6 +578,7 @@ export default function RSSReader() {
                                     ))}
                                 </div>
                             </div>
+
 
                             {/* Follow-up Questions */}
                             <div className="bg-glass border border-glass-border rounded-xl p-6">
