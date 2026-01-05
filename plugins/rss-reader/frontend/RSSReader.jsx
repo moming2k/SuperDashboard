@@ -243,10 +243,15 @@ export default function RSSReader() {
             window.location.hash = `rss-reader/article/${article.id}`;
         }
 
-        // Load suggested Q&A with selected language
+        // Don't auto-load Q&A - let user generate on demand
+    };
+
+    const generateQA = async () => {
+        if (!selectedArticle) return;
+
         setIsLoadingQA(true);
         try {
-            const res = await fetch(`${API_BASE}/plugins/rss-reader/articles/${article.id}/qa?language=${encodeURIComponent(qaLanguage)}`);
+            const res = await fetch(`${API_BASE}/plugins/rss-reader/articles/${selectedArticle.id}/qa?language=${encodeURIComponent(qaLanguage)}&regenerate=true`);
             const data = await res.json();
             setSuggestedQA(data);
         } catch (e) {
@@ -553,11 +558,11 @@ export default function RSSReader() {
                                             <option value="Japanese">日本語</option>
                                         </select>
                                         <button
-                                            onClick={() => selectArticle(selectedArticle, false)}
+                                            onClick={generateQA}
                                             disabled={isLoadingQA}
                                             className="text-xs bg-primary/20 text-primary px-3 py-1.5 rounded-lg hover:bg-primary/30 transition-colors disabled:opacity-50"
                                         >
-                                            🔄 Regenerate
+                                            {suggestedQA.length > 0 ? '🔄 Regenerate' : '✨ Generate'}
                                         </button>
                                     </div>
                                 </div>
@@ -567,7 +572,10 @@ export default function RSSReader() {
                                     </div>
                                 )}
                                 {!isLoadingQA && suggestedQA.length === 0 && (
-                                    <div className="text-text-muted text-sm">No Q&A available</div>
+                                    <div className="text-center text-text-muted py-8">
+                                        <div className="text-4xl mb-3">💡</div>
+                                        <p className="text-sm">Click "Generate" to create AI-powered questions and answers</p>
+                                    </div>
                                 )}
                                 <div className="space-y-4">
                                     {suggestedQA.map((qa, idx) => (
