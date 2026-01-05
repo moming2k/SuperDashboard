@@ -55,8 +55,8 @@ function SnippetManager() {
         e.preventDefault();
         document.getElementById('snippet-search')?.focus();
       }
-      // Ctrl/Cmd + Shift + N: New snippet
-      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'N') {
+      // Ctrl/Cmd + B: New snippet
+      if ((e.ctrlKey || e.metaKey) && e.key === 'b') {
         e.preventDefault();
         setShowCreateForm(true);
         setActiveTab('library');
@@ -366,8 +366,8 @@ function SnippetManager() {
           <button
             onClick={() => setFilters({ ...filters, favorite: filters.favorite === true ? null : true })}
             className={`px-4 py-2 rounded-xl transition-all ${filters.favorite === true
-                ? 'bg-primary text-white'
-                : 'bg-bg-dark border border-glass-border text-text-main hover:border-primary'
+              ? 'bg-primary text-white'
+              : 'bg-bg-dark border border-glass-border text-text-main hover:border-primary'
               }`}
           >
             ⭐ Favorites
@@ -375,8 +375,8 @@ function SnippetManager() {
           <button
             onClick={() => setFilters({ ...filters, visibility: filters.visibility === 'team' ? '' : 'team' })}
             className={`px-4 py-2 rounded-xl transition-all ${filters.visibility === 'team'
-                ? 'bg-primary text-white'
-                : 'bg-bg-dark border border-glass-border text-text-main hover:border-primary'
+              ? 'bg-primary text-white'
+              : 'bg-bg-dark border border-glass-border text-text-main hover:border-primary'
               }`}
           >
             👥 Team
@@ -384,8 +384,8 @@ function SnippetManager() {
           <button
             onClick={() => setFilters({ ...filters, visibility: filters.visibility === 'personal' ? '' : 'personal' })}
             className={`px-4 py-2 rounded-xl transition-all ${filters.visibility === 'personal'
-                ? 'bg-primary text-white'
-                : 'bg-bg-dark border border-glass-border text-text-main hover:border-primary'
+              ? 'bg-primary text-white'
+              : 'bg-bg-dark border border-glass-border text-text-main hover:border-primary'
               }`}
           >
             👤 Personal
@@ -723,7 +723,7 @@ function SnippetManager() {
       {/* Keyboard Shortcuts Help */}
       <div className="fixed bottom-4 right-4 bg-glass backdrop-blur-xl border border-glass-border rounded-xl p-3 text-xs text-text-muted">
         <div>⌘/Ctrl + K: Search</div>
-        <div>⌘/Ctrl + Shift + N: New Snippet</div>
+        <div>⌘/Ctrl + B: New Snippet</div>
         <div>Esc: Close</div>
       </div>
     </div>
