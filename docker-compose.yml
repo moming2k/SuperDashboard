@@ -10,7 +10,7 @@ services:
       POSTGRES_PASSWORD: postgres
       POSTGRES_DB: superdashboard
     ports:
-      - "5432:5432"
+      - "5433:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -34,7 +34,7 @@ services:
       PORT: 8000
       HOST: 0.0.0.0
     ports:
-      - "8000:8000"
+      - "8001:8000"
     depends_on:
       postgres:
         condition: service_healthy
@@ -42,7 +42,9 @@ services:
       # Mount backend for hot reload in development
       - ./backend:/app/backend
       - ./plugins:/app/plugins
-    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+      # Preserve .venv from Docker image (don't override with host mount)
+      - /app/backend/.venv
+    command: /app/backend/.venv/bin/python -m uvicorn main:app --host 0.0.0.0 --port 8000 --reload
     restart: unless-stopped
 
   # Frontend (Development)
