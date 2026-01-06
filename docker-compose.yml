@@ -3,7 +3,7 @@ version: '3.8'
 services:
   # PostgreSQL Database
   postgres:
-    image: postgres:16-alpine
+    image: ${POSTGRES_IMAGE:-postgres:16-alpine}
     container_name: superdashboard-db
     environment:
       POSTGRES_USER: postgres
@@ -24,6 +24,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      args:
+        PYTHON_BASE_IMAGE: ${PYTHON_BASE_IMAGE:-python:3.12-slim}
     container_name: superdashboard-backend
     env_file:
       - backend/.env
@@ -45,7 +47,7 @@ services:
 
   # Frontend (Development)
   frontend:
-    image: node:20-alpine
+    image: ${NODE_IMAGE:-node:20-alpine}
     container_name: superdashboard-frontend
     working_dir: /app
     volumes:

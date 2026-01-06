@@ -4,8 +4,11 @@
 # Build: docker build -t superdashboard:latest .
 # Run: docker run -p 8000:8000 --env-file backend/.env superdashboard:latest
 
+# Allow configurable Python base image
+ARG PYTHON_BASE_IMAGE=python:3.12-slim
+
 # ==================== Base Stage ====================
-FROM python:3.12-slim as base
+FROM ${PYTHON_BASE_IMAGE} as base
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
@@ -49,7 +52,9 @@ COPY backend/ ./
 COPY plugins/ /app/plugins/
 
 # ==================== Runtime Stage ====================
-FROM python:3.12-slim as runtime
+# Re-declare ARG for this stage
+ARG PYTHON_BASE_IMAGE=python:3.12-slim
+FROM ${PYTHON_BASE_IMAGE} as runtime
 
 # Install only runtime system dependencies
 RUN apt-get update && apt-get install -y \
