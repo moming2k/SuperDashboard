@@ -33,6 +33,8 @@ FROM base as dependencies
 
 # Copy dependency files
 COPY backend/pyproject.toml ./backend/
+# Copy README.md as it's referenced in pyproject.toml
+COPY README.md ./README.md
 
 WORKDIR /app/backend
 
