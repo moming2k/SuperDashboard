@@ -18,9 +18,6 @@ import {
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 
-// Import all plugin components using glob pattern
-const pluginModules = import.meta.glob('./plugins/*/*.jsx', { eager: true });
-
 const componentCache = {};
 
 class ErrorBoundary extends React.Component {
@@ -46,21 +43,35 @@ const PluginComponent = ({ plugin, props }) => {
   if (!plugin || !plugin.manifest?.frontendComponent) return null;
 
   if (!componentCache[plugin.name]) {
-    // Find the matching module from glob imports
+    // Use dynamic import instead of glob pattern to avoid symlink issues
     const modulePath = `./plugins/${plugin.name}/${plugin.manifest.frontendComponent}.jsx`;
-    const module = pluginModules[modulePath];
 
-    if (!module) {
-      console.error(`Plugin component not found: ${modulePath}`);
+    try {
+      // Create lazy component with dynamic import
+      componentCache[plugin.name] = lazy(() =>
+        import(/* @vite-ignore */ modulePath).catch(err => {
+          console.error(`Failed to load plugin component: ${modulePath}`, err);
+          // Return a component that shows the error
+          return {
+            default: () => (
+              <div className="p-8 bg-red-500/10 border border-red-500/20 rounded-2xl text-red-400">
+                <h2 className="text-xl font-bold mb-2">Plugin Load Error</h2>
+                <p>Failed to load component: {modulePath}</p>
+                <p className="mt-2 text-sm">{err.message}</p>
+              </div>
+            )
+          };
+        })
+      );
+    } catch (err) {
+      console.error(`Error creating lazy component for ${plugin.name}:`, err);
       return (
         <div className="p-8 bg-red-500/10 border border-red-500/20 rounded-2xl text-red-400">
-          <h2 className="text-xl font-bold mb-2">Plugin Not Found</h2>
-          <p>Component file not found: {modulePath}</p>
+          <h2 className="text-xl font-bold mb-2">Plugin Error</h2>
+          <p>Failed to initialize plugin: {plugin.name}</p>
         </div>
       );
     }
-
-    componentCache[plugin.name] = module.default;
   }
 
   const Component = componentCache[plugin.name];

@@ -13,6 +13,10 @@ export default defineConfig({
   ],
   resolve: {
     preserveSymlinks: true,
+    alias: {
+      '@/config': '/src/config.js',
+      '@': '/src',
+    },
   },
   server: {
     host: '0.0.0.0',
