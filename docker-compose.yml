@@ -54,6 +54,7 @@ services:
     working_dir: /app
     volumes:
       - ./frontend:/app
+      - ./plugins:/plugins # Mount plugins so symlinks in src/plugins work
       - /app/node_modules # Anonymous volume for node_modules
       - pnpm-store:/root/.local/share/pnpm/store # pnpm store cache
     ports:
