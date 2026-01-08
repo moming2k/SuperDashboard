@@ -20,12 +20,15 @@
     "@dnd-kit/sortable": "^10.0.0",
     "@dnd-kit/utilities": "^3.2.2",
     "highlight.js": "^11.11.1",
+    "mdast-util-gfm": "^3.0.0",
+    "micromark-extension-gfm": "^3.0.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "react-markdown": "^10.1.0",
     "rehype-highlight": "^7.0.2",
     "remark-gfm": "^4.0.1",
-    "scheduler": "^0.25.0"
+    "scheduler": "^0.25.0",
+    "unist-util-visit": "^5.0.0"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.1",
