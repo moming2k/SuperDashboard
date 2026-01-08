@@ -464,7 +464,7 @@ function SnippetManager() {
 
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium mb-2">Title</label>
+                <label className="block text-sm font-medium text-text-main mb-2">Title</label>
                 <input
                   type="text"
                   value={formData.title}
@@ -475,7 +475,7 @@ function SnippetManager() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium mb-2">Description (optional)</label>
+                <label className="block text-sm font-medium text-text-main mb-2">Description (optional)</label>
                 <input
                   type="text"
                   value={formData.description}
@@ -487,7 +487,7 @@ function SnippetManager() {
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium mb-2">Language</label>
+                  <label className="block text-sm font-medium text-text-main mb-2">Language</label>
                   <select
                     value={formData.language}
                     onChange={(e) => setFormData({ ...formData, language: e.target.value })}
@@ -500,7 +500,7 @@ function SnippetManager() {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium mb-2">Visibility</label>
+                  <label className="block text-sm font-medium text-text-main mb-2">Visibility</label>
                   <select
                     value={formData.visibility}
                     onChange={(e) => setFormData({ ...formData, visibility: e.target.value })}
@@ -514,7 +514,7 @@ function SnippetManager() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium mb-2">Code</label>
+                <label className="block text-sm font-medium text-text-main mb-2">Code</label>
                 <textarea
                   value={formData.code}
                   onChange={(e) => setFormData({ ...formData, code: e.target.value })}
@@ -525,7 +525,7 @@ function SnippetManager() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium mb-2">Tags</label>
+                <label className="block text-sm font-medium text-text-main mb-2">Tags</label>
                 <div className="flex gap-2 mb-2">
                   <input
                     type="text"
@@ -567,7 +567,7 @@ function SnippetManager() {
                   onChange={(e) => setFormData({ ...formData, favorite: e.target.checked })}
                   className="w-4 h-4"
                 />
-                <label className="text-sm">Mark as favorite</label>
+                <label className="text-sm text-text-main">Mark as favorite</label>
               </div>
             </div>
 
