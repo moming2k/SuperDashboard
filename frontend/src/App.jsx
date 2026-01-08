@@ -18,6 +18,9 @@ import {
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 
+// Import all plugin components using glob pattern
+const pluginModules = import.meta.glob('./plugins/*/*.jsx', { eager: true });
+
 const componentCache = {};
 
 class ErrorBoundary extends React.Component {
@@ -43,7 +46,21 @@ const PluginComponent = ({ plugin, props }) => {
   if (!plugin || !plugin.manifest?.frontendComponent) return null;
 
   if (!componentCache[plugin.name]) {
-    componentCache[plugin.name] = lazy(() => import(`./plugins/${plugin.name}/${plugin.manifest.frontendComponent}.jsx`));
+    // Find the matching module from glob imports
+    const modulePath = `./plugins/${plugin.name}/${plugin.manifest.frontendComponent}.jsx`;
+    const module = pluginModules[modulePath];
+
+    if (!module) {
+      console.error(`Plugin component not found: ${modulePath}`);
+      return (
+        <div className="p-8 bg-red-500/10 border border-red-500/20 rounded-2xl text-red-400">
+          <h2 className="text-xl font-bold mb-2">Plugin Not Found</h2>
+          <p>Component file not found: {modulePath}</p>
+        </div>
+      );
+    }
+
+    componentCache[plugin.name] = module.default;
   }
 
   const Component = componentCache[plugin.name];
