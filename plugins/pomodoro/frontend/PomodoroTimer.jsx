@@ -8,8 +8,22 @@ function PomodoroTimer() {
   const [isRunning, setIsRunning] = useState(false);
   const [mode, setMode] = useState('work'); // 'work', 'break', or 'idle'
   const [completedPomodoros, setCompletedPomodoros] = useState(0);
+  const [notificationPermission, setNotificationPermission] = useState('default');
   const timerRef = useRef(null);
   const audioRef = useRef(null);
+
+  // Request notification permission on mount
+  useEffect(() => {
+    if ('Notification' in window) {
+      setNotificationPermission(Notification.permission);
+
+      if (Notification.permission === 'default') {
+        Notification.requestPermission().then((permission) => {
+          setNotificationPermission(permission);
+        });
+      }
+    }
+  }, []);
 
   // Format time as MM:SS
   const formatTime = (seconds) => {
@@ -38,6 +52,19 @@ function PomodoroTimer() {
     oscillator.stop(audioContext.currentTime + 0.5);
   };
 
+  // Show desktop notification
+  const showDesktopNotification = (title, body, icon) => {
+    if ('Notification' in window && notificationPermission === 'granted') {
+      new Notification(title, {
+        body,
+        icon: icon || '🍅',
+        badge: '🍅',
+        requireInteraction: false,
+        silent: false
+      });
+    }
+  };
+
   // Timer effect
   useEffect(() => {
     if (isRunning && timeLeft > 0) {
@@ -50,11 +77,21 @@ function PomodoroTimer() {
 
       if (mode === 'work') {
         // Transition to break
+        showDesktopNotification(
+          '🍅 Work Session Complete!',
+          'Great job! Time for a 5-minute break.',
+          '🍅'
+        );
         setMode('break');
         setTimeLeft(BREAK_TIME);
         setCompletedPomodoros((prev) => prev + 1);
       } else if (mode === 'break') {
         // Break finished, stop and wait
+        showDesktopNotification(
+          '☕ Break Time Over!',
+          'Ready to start another Pomodoro?',
+          '🍅'
+        );
         setMode('idle');
         setIsRunning(false);
         setTimeLeft(WORK_TIME);
@@ -66,7 +103,7 @@ function PomodoroTimer() {
         clearInterval(timerRef.current);
       }
     };
-  }, [isRunning, timeLeft, mode]);
+  }, [isRunning, timeLeft, mode, notificationPermission]);
 
   // Control handlers
   const handleStart = () => {
@@ -91,6 +128,14 @@ function PomodoroTimer() {
     setMode('work');
     setTimeLeft(WORK_TIME);
     setIsRunning(false);
+  };
+
+  const handleRequestNotification = () => {
+    if ('Notification' in window && notificationPermission !== 'granted') {
+      Notification.requestPermission().then((permission) => {
+        setNotificationPermission(permission);
+      });
+    }
   };
 
   // Get current mode display
@@ -121,6 +166,34 @@ function PomodoroTimer() {
         <p className="text-text-muted">
           Stay focused with the Pomodoro Technique: 25 minutes work, 5 minutes break
         </p>
+
+        {/* Notification Status Banner */}
+        {notificationPermission === 'granted' && (
+          <div className="mt-4 bg-green-500/10 border border-green-500/30 rounded-xl p-3 flex items-center gap-2">
+            <span className="text-green-400">🔔</span>
+            <span className="text-sm text-green-400">Desktop notifications enabled</span>
+          </div>
+        )}
+        {notificationPermission === 'denied' && (
+          <div className="mt-4 bg-red-500/10 border border-red-500/30 rounded-xl p-3 flex items-center gap-2">
+            <span className="text-red-400">🔕</span>
+            <span className="text-sm text-red-400">Desktop notifications blocked</span>
+          </div>
+        )}
+        {notificationPermission === 'default' && 'Notification' in window && (
+          <div className="mt-4 bg-yellow-500/10 border border-yellow-500/30 rounded-xl p-3 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className="text-yellow-400">🔔</span>
+              <span className="text-sm text-yellow-400">Desktop notifications available</span>
+            </div>
+            <button
+              onClick={handleRequestNotification}
+              className="bg-yellow-500/20 hover:bg-yellow-500/30 text-yellow-400 px-4 py-1 rounded-lg text-sm font-semibold transition-all"
+            >
+              Enable
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Main Timer Card */}
@@ -210,7 +283,7 @@ function PomodoroTimer() {
           </li>
           <li className="flex items-start gap-2">
             <span className="text-blue-400">🔔</span>
-            <span><strong>Notifications:</strong> Audio alert when transitioning between modes</span>
+            <span><strong>Notifications:</strong> Audio alerts and desktop notifications when transitioning between modes</span>
           </li>
           <li className="flex items-start gap-2">
             <span className="text-purple-400">⏸</span>
