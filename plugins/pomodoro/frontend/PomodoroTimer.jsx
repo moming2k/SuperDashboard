@@ -44,7 +44,7 @@ function PomodoroTimer() {
     if (isRunning && stateLoaded) {
       const saveInterval = setInterval(() => {
         saveTimerState();
-      }, 5000); // Save every 5 seconds
+      }, 2000); // Save every 2 seconds (reduced from 5000 for better responsiveness)
 
       return () => clearInterval(saveInterval);
     }
@@ -57,6 +57,18 @@ function PomodoroTimer() {
         saveTimerState();
       }
     };
+  }, [stateLoaded]);
+
+  // Save state when user switches tabs or minimizes browser
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.hidden && stateLoaded) {
+        saveTimerState();
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
   }, [stateLoaded]);
 
   // Helper function to send notification to backend
@@ -301,13 +313,22 @@ function PomodoroTimer() {
   }, [isRunning, timeLeft, mode, notificationPermission]);
 
   // Control handlers
-  const handleStart = () => {
+  const handleStart = async () => {
     if (mode === 'idle') {
       setMode('work');
       setTimeLeft(WORK_TIME);
       setSessionStartTime(new Date()); // Track session start time
     }
     setIsRunning(true);
+
+    // Manually update ref and save immediately
+    stateRef.current = {
+      ...stateRef.current,
+      isRunning: true,
+      mode: mode === 'idle' ? 'work' : mode,
+      timeLeft: mode === 'idle' ? WORK_TIME : timeLeft
+    };
+    await saveTimerState();
   };
 
   const handleResume = async () => {
@@ -350,12 +371,20 @@ function PomodoroTimer() {
     }
   };
 
-  const handleSkipBreak = () => {
+  const handleSkipBreak = async () => {
     setMode('work');
     setTimeLeft(WORK_TIME);
     setIsRunning(false);
     setSessionStartTime(null);
-    saveTimerState(); // Save immediately on skip
+
+    // Update ref before saving
+    stateRef.current = {
+      ...stateRef.current,
+      mode: 'work',
+      timeLeft: WORK_TIME,
+      isRunning: false
+    };
+    await saveTimerState();
   };
 
   const handleRequestNotification = () => {
@@ -453,7 +482,7 @@ function PomodoroTimer() {
         <div className="flex gap-4 justify-center">
           {!isRunning ? (
             <button
-              onClick={handleStart}
+              onClick={mode === 'idle' ? handleStart : handleResume}
               className="bg-gradient-to-r from-green-500 to-emerald-500 text-white px-8 py-4 rounded-xl font-semibold text-lg cursor-pointer transition-all duration-300 hover:scale-105 hover:shadow-[0_8px_20px_rgba(34,197,94,0.4)]"
             >
               {mode === 'idle' ? '▶ Start Pomodoro' : '▶ Resume'}
