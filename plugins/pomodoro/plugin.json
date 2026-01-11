@@ -4,9 +4,11 @@
   "description": "Pomodoro technique timer: 25 minutes work, 5 minutes break",
   "version": "1.0.0",
   "tab": {
+    "id": "pomodoro",
     "label": "Pomodoro",
     "icon": "🍅",
-    "order": 25
+    "order": 1,
+    "sidebarWidget": "PomodoroSidebarWidget"
   },
   "frontendComponent": "PomodoroTimer",
   "icon": "🍅",
