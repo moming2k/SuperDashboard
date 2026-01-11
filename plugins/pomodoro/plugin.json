@@ -1,0 +1,14 @@
+{
+  "name": "pomodoro",
+  "displayName": "Pomodoro Timer",
+  "description": "Pomodoro technique timer: 25 minutes work, 5 minutes break",
+  "version": "1.0.0",
+  "tab": {
+    "label": "Pomodoro",
+    "icon": "🍅",
+    "order": 25
+  },
+  "frontendComponent": "PomodoroTimer",
+  "icon": "🍅",
+  "category": "productivity"
+}
