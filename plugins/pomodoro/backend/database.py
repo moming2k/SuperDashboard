@@ -30,5 +30,15 @@ def get_db():
 
 def init_db():
     """Initialize database tables"""
+    # Import models to register them with Base.metadata
+    import importlib.util
+    import os
+    
+    models_path = os.path.join(os.path.dirname(__file__), "models.py")
+    spec = importlib.util.spec_from_file_location("pomodoro_models_init", models_path)
+    models_module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(models_module)
+    
     Base.metadata.create_all(bind=engine)
     print("🍅 Pomodoro database tables initialized")
+
