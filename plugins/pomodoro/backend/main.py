@@ -168,28 +168,27 @@ async def save_state(state_data: PomodoroStateRequest, db: Session = Depends(get
 
 
 @router.post("/state/reset")
-async def reset_state(db: Session = Depends(get_db)):
-    """Reset the Pomodoro timer state"""
+async def reset_timer(db: Session = Depends(get_db)):
+    """Reset the Pomodoro timer to initial state"""
     if not database_available:
         raise HTTPException(status_code=503, detail="Database not available")
 
     try:
         state = db.query(PomodoroStateModel).filter_by(id="default").first()
+        if not state:
+            state = PomodoroStateModel(id="default")
+            db.add(state)
 
-        if state:
-            state.time_left = 1500  # 25 minutes
-            state.mode = "idle"
-            state.is_running = 0
-            state.completed_pomodoros = 0
-            db.commit()
-            db.refresh(state)
-            return state.to_dict()
-        else:
-            return {"message": "No state to reset"}
-
+        state.time_left = 1500  # 25 minutes
+        state.mode = "work"
+        state.is_running = 0  # Stop the timer when reset
+        state.completed_pomodoros = 0
+        db.commit()
+        db.refresh(state)
+        return state.to_dict()
     except Exception as e:
         db.rollback()
-        raise HTTPException(status_code=500, detail=f"Error resetting state: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error resetting timer: {str(e)}")
 
 
 @router.get("/health")
@@ -479,3 +478,36 @@ async def get_statistics(db: Session = Depends(get_db)):
         raise HTTPException(status_code=500, detail=f"Error calculating statistics: {str(e)}")
 
 
+@router.get("/badge")
+async def get_badge(db: Session = Depends(get_db)):
+    """Return badge information for the plugin tab"""
+    if not database_available:
+        return {"badge": None}
+    
+    try:
+        from datetime import datetime, timedelta
+        
+        # Get today's start time
+        today_start = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+        
+        # Count today's completed work sessions
+        today_sessions = db.query(PomodoroSessionModel).filter(
+            PomodoroSessionModel.session_type == "work",
+            PomodoroSessionModel.completed == 1,
+            PomodoroSessionModel.created_at >= today_start
+        ).count()
+        
+        if today_sessions == 0:
+            return {"badge": None}
+        
+        return {
+            "badge": {
+                "type": "count",
+                "value": str(today_sessions),
+                "color": "primary",
+                "tooltip": f"{today_sessions} Pomodoro{'s' if today_sessions > 1 else ''} completed today"
+            }
+        }
+    except Exception as e:
+        # Return empty badge on error
+        return {"badge": None}

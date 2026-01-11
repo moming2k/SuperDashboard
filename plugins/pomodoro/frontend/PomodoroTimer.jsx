@@ -112,6 +112,10 @@ function PomodoroTimer() {
       const response = await fetch(`${API_BASE_URL}/plugins/pomodoro/stats`);
       const data = await response.json();
       setStats(data);
+      // Update completed pomodoros counter from today's stats
+      if (data.todaySessions !== undefined) {
+        setCompletedPomodoros(data.todaySessions);
+      }
     } catch (error) {
       console.error('Failed to load stats:', error);
     }
@@ -173,7 +177,7 @@ function PomodoroTimer() {
         body: JSON.stringify({
           timeLeft: currentState.timeLeft,
           mode: currentState.mode,
-          isRunning: currentState.isRunning,
+          isRunning: currentState.isRunning ? 1 : 0, // Convert boolean to integer
           completedPomodoros: currentState.completedPomodoros
         })
       });
@@ -190,6 +194,23 @@ function PomodoroTimer() {
     return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
 
+  // Format relative time (e.g., "5 minutes ago", "2 hours ago")
+  const formatRelativeTime = (timestamp) => {
+    const now = new Date();
+    const past = new Date(timestamp);
+    const diffMs = now - past;
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMs / 3600000);
+    const diffDays = Math.floor(diffMs / 86400000);
+
+    if (diffMins < 1) return 'Just now';
+    if (diffMins < 60) return `${diffMins} minute${diffMins > 1 ? 's' : ''} ago`;
+    if (diffHours < 24) return `${diffHours} hour${diffHours > 1 ? 's' : ''} ago`;
+    if (diffDays < 7) return `${diffDays} day${diffDays > 1 ? 's' : ''} ago`;
+
+    // For older sessions, show the full date
+    return past.toLocaleDateString();
+  };
   // Play notification sound
   const playNotification = () => {
     // Create a simple beep sound using Web Audio API
@@ -230,7 +251,9 @@ function PomodoroTimer() {
         setTimeLeft((prev) => prev - 1);
       }, 1000);
     } else if (timeLeft === 0 && isRunning) {
-      // Timer reached 0
+      // Timer reached 0 - immediately stop to prevent duplicate triggers
+      setIsRunning(false);
+
       playNotification();
       const endTime = new Date();
 
@@ -265,7 +288,6 @@ function PomodoroTimer() {
         }
 
         setMode('idle');
-        setIsRunning(false);
         setTimeLeft(WORK_TIME);
         setSessionStartTime(null);
       }
@@ -284,23 +306,48 @@ function PomodoroTimer() {
       setMode('work');
       setTimeLeft(WORK_TIME);
       setSessionStartTime(new Date()); // Track session start time
-    } else if (!sessionStartTime) {
-      setSessionStartTime(new Date()); // Track if resuming
     }
     setIsRunning(true);
   };
 
-  const handlePause = () => {
-    setIsRunning(false);
-    saveTimerState(); // Save immediately on pause
+  const handleResume = async () => {
+    if (!sessionStartTime && mode === 'work') {
+      setSessionStartTime(new Date()); // Track if resuming
+    }
+    setIsRunning(true);
+    // Manually update ref to ensure save gets correct value
+    stateRef.current = { ...stateRef.current, isRunning: true };
+    await saveTimerState(); // Save to backend immediately on resume
   };
 
-  const handleReset = () => {
+  const handlePause = async () => {
     setIsRunning(false);
-    setMode('work');
-    setTimeLeft(WORK_TIME);
-    setSessionStartTime(null);
-    saveTimerState(); // Save immediately on reset
+    // Manually update ref to ensure save gets correct value
+    stateRef.current = { ...stateRef.current, isRunning: false };
+    await saveTimerState(); // Save to backend immediately on pause
+  };
+
+  const handleReset = async () => {
+    try {
+      // Call backend to reset state
+      await fetch(`${API_BASE_URL}/plugins/pomodoro/state/reset`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+      });
+
+      // Update local state
+      setIsRunning(false);
+      setMode('work');
+      setTimeLeft(WORK_TIME);
+      setSessionStartTime(null);
+    } catch (error) {
+      console.error('Failed to reset timer:', error);
+      // Still update local state even if backend fails
+      setIsRunning(false);
+      setMode('work');
+      setTimeLeft(WORK_TIME);
+      setSessionStartTime(null);
+    }
   };
 
   const handleSkipBreak = () => {
@@ -509,7 +556,7 @@ function PomodoroTimer() {
                         {session.completed && <span className="text-xs bg-green-500/20 text-green-400 px-2 py-0.5 rounded">✓ Completed</span>}
                       </div>
                       <p className="text-xs text-text-muted">
-                        {new Date(session.startTime).toLocaleString()} - {new Date(session.endTime).toLocaleTimeString()}
+                        {formatRelativeTime(session.startTime)}
                       </p>
                       {session.notes && (
                         <p className="text-sm text-text-main mt-2 bg-bg-main/50 rounded p-2">{session.notes}</p>
@@ -528,7 +575,7 @@ function PomodoroTimer() {
         <div className="flex items-center justify-between">
           <div>
             <p className="text-text-muted text-sm mb-1">Completed Pomodoros Today</p>
-            <p className="text-3xl font-bold text-primary">{completedPomodoros}</p>
+            <p className="text-3xl font-bold text-primary">{stats?.todaySessions || 0}</p>
           </div>
           <div className="text-6xl">🎯</div>
         </div>
