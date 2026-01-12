@@ -85,6 +85,39 @@ const PluginComponent = ({ plugin, props }) => {
   );
 };
 
+const PluginSidebarWidget = ({ plugin }) => {
+  if (!plugin?.manifest?.tab?.sidebarWidget) return null;
+
+  const widgetName = plugin.manifest.tab.sidebarWidget;
+  const cacheKey = `${plugin.name}_sidebar_widget`;
+
+  if (!componentCache[cacheKey]) {
+    const modulePath = `./plugins/${plugin.name}/${widgetName}.jsx`;
+
+    try {
+      componentCache[cacheKey] = lazy(() =>
+        import(/* @vite-ignore */ modulePath).catch(err => {
+          console.error(`Failed to load sidebar widget: ${modulePath}`, err);
+          return { default: () => null };
+        })
+      );
+    } catch (err) {
+      console.error(`Error creating lazy sidebar widget for ${plugin.name}:`, err);
+      return null;
+    }
+  }
+
+  const Widget = componentCache[cacheKey];
+
+  return (
+    <ErrorBoundary>
+      <Suspense fallback={null}>
+        <Widget />
+      </Suspense>
+    </ErrorBoundary>
+  );
+};
+
 const SortablePluginItem = ({ plugin, togglePlugin, openConfigModal }) => {
   const {
     attributes,
@@ -196,6 +229,7 @@ function App() {
   const [selectedPlugin, setSelectedPlugin] = useState(null);
   const [pluginConfig, setPluginConfig] = useState({});
   const [toast, setToast] = useState(null);
+  const [pluginBadges, setPluginBadges] = useState({});
 
   // Custom setActiveTab that also updates URL
   const navigateToTab = (tabId) => {
@@ -212,6 +246,16 @@ function App() {
     } catch (e) {
       console.error("Failed to fetch plugins", e);
       setLoading(false);
+    }
+  };
+
+  const fetchPluginBadges = async () => {
+    try {
+      const res = await fetch(`${API_BASE}/plugins/badges`);
+      const data = await res.json();
+      setPluginBadges(data.badges || {});
+    } catch (e) {
+      console.error("Failed to fetch plugin badges", e);
     }
   };
 
@@ -332,6 +376,10 @@ function App() {
 
   useEffect(() => {
     fetchPlugins();
+    fetchPluginBadges();
+
+    // Set up badge polling (every 30 seconds)
+    const badgeInterval = setInterval(fetchPluginBadges, 30000);
 
     // Listen for navigation events from plugins
     const handleNavigate = (e) => {
@@ -354,6 +402,7 @@ function App() {
     window.addEventListener('hashchange', handleHashChange);
 
     return () => {
+      clearInterval(badgeInterval);
       window.removeEventListener('navigate-tab', handleNavigate);
       window.removeEventListener('hashchange', handleHashChange);
     };
@@ -436,18 +485,36 @@ function App() {
           SuperDashboard
         </div>
         <nav className="flex flex-col gap-2">
-          {visibleTabs.map((tab) => (
-            <div
-              key={tab.id}
-              className={`flex items-center gap-3 p-3 px-4 rounded-xl cursor-pointer transition-all duration-300 hover:bg-glass hover:text-text-main hover:translate-x-1 ${activeTab === tab.id
-                ? 'bg-glass text-text-main translate-x-1'
-                : 'text-text-muted'
-                }`}
-              onClick={() => navigateToTab(tab.id)}
-            >
-              {tab.label}
-            </div>
-          ))}
+          {visibleTabs.map((tab) => {
+            const badge = pluginBadges[tab.plugin.name];
+            return (
+              <div key={tab.id}>
+                <div
+                  className={`flex items-center justify-between gap-3 p-3 px-4 rounded-xl cursor-pointer transition-all duration-300 hover:bg-glass hover:text-text-main hover:translate-x-1 ${activeTab === tab.id
+                    ? 'bg-glass text-text-main translate-x-1'
+                    : 'text-text-muted'
+                    }`}
+                  onClick={() => navigateToTab(tab.id)}
+                >
+                  <span>{tab.label}</span>
+                  {badge && (
+                    <span
+                      className={`px-2 py-0.5 rounded-full text-xs font-semibold ${badge.color === 'primary' ? 'bg-primary/20 text-primary' :
+                          badge.color === 'success' ? 'bg-green-500/20 text-green-400' :
+                            badge.color === 'warning' ? 'bg-yellow-500/20 text-yellow-400' :
+                              badge.color === 'error' ? 'bg-red-500/20 text-red-400' :
+                                'bg-gray-500/20 text-gray-400'
+                        }`}
+                      title={badge.tooltip}
+                    >
+                      {badge.value}
+                    </span>
+                  )}
+                </div>
+                <PluginSidebarWidget plugin={tab.plugin} />
+              </div>
+            );
+          })}
         </nav>
 
         {/* Plugin Registry Tab */}

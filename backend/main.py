@@ -446,6 +446,38 @@ async def reorder_plugins(request: PluginOrderBulkUpdate, db: Session = Depends(
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.get("/plugins/badges")
+async def get_plugin_badges():
+    """
+    Aggregate badge information from all plugins.
+    Calls each plugin's /badge endpoint and returns the results.
+    """
+    import httpx
+    badges = {}
+    
+    # Get list of all plugins
+    if not os.path.exists(PLUGINS_DIR):
+        return {"badges": badges}
+    
+    async with httpx.AsyncClient(timeout=2.0) as client:
+        for item in os.listdir(PLUGINS_DIR):
+            item_path = os.path.join(PLUGINS_DIR, item)
+            if not os.path.isdir(item_path) or item == "core":
+                continue
+            
+            # Try to fetch badge from plugin
+            try:
+                response = await client.get(f"http://localhost:{config.port}/plugins/{item}/badge")
+                if response.status_code == 200:
+                    data = response.json()
+                    if data.get("badge"):
+                        badges[item] = data["badge"]
+            except:
+                # Skip plugins that don't have badge endpoint or fail
+                continue
+    
+    return {"badges": badges}
+
 # ==================== AI Models Endpoint ====================
 
 @app.get("/models")
