@@ -1,8 +1,8 @@
 import React, { useState, useEffect, lazy, Suspense } from 'react';
-import { Responsive, WidthProvider } from 'react-grid-layout';
+import { Responsive, WidthProvider } from 'react-grid-layout/legacy';
 import 'react-grid-layout/css/styles.css';
 import 'react-resizable/css/styles.css';
-import config, { API_BASE } from '../../../../frontend/src/config';
+import config, { API_BASE } from '../../config';
 import WidgetSelector from './WidgetSelector';
 import './dashboard.css';
 
@@ -17,19 +17,37 @@ const WidgetContainer = ({ widget, onRemove }) => {
     const cacheKey = `${widget.pluginName}.${widget.component}`;
 
     if (!widgetComponentCache[cacheKey]) {
-      widgetComponentCache[cacheKey] = lazy(() =>
-        import(`../../../../frontend/src/plugins/${widget.pluginName}/${widget.component}.jsx`)
-          .catch(err => {
-            console.error(`Failed to load widget: ${widget.pluginName}/${widget.component}`, err);
-            return {
-              default: () => (
-                <div className="text-red-400 text-sm">
-                  Failed to load widget: {widget.displayName}
-                </div>
-              )
-            };
-          })
-      );
+      // For dashboard widgets, load from local widgets folder
+      if (widget.pluginName === 'dashboard') {
+        widgetComponentCache[cacheKey] = lazy(() =>
+          import(`./widgets/${widget.component}.jsx`)
+            .catch(err => {
+              console.error(`Failed to load widget: ${widget.pluginName}/${widget.component}`, err);
+              return {
+                default: () => (
+                  <div className="text-red-400 text-sm">
+                    Failed to load widget: {widget.displayName}
+                  </div>
+                )
+              };
+            })
+        );
+      } else {
+        // For other plugin widgets, load from their plugin directory
+        widgetComponentCache[cacheKey] = lazy(() =>
+          import(`../${widget.pluginName}/${widget.component}.jsx`)
+            .catch(err => {
+              console.error(`Failed to load widget: ${widget.pluginName}/${widget.component}`, err);
+              return {
+                default: () => (
+                  <div className="text-red-400 text-sm">
+                    Failed to load widget: {widget.displayName}
+                  </div>
+                )
+              };
+            })
+        );
+      }
     }
 
     return widgetComponentCache[cacheKey];
