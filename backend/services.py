@@ -4,7 +4,7 @@ Provides clean interface for database interactions with dependency injection
 """
 from typing import List, Optional, Dict, Any
 from sqlalchemy.orm import Session
-from database import Task, MCPServer, PluginState, PluginOrder, SystemConfig
+from database import Task, MCPServer, PluginState, PluginOrder, SystemConfig, DashboardLayout
 
 
 # ==================== Task Services ====================
@@ -237,3 +237,26 @@ def get_mcp_enabled(db: Session) -> bool:
 def set_mcp_enabled(db: Session, enabled: bool) -> SystemConfig:
     """Set MCP enabled status"""
     return set_system_config(db, "mcp_enabled", enabled)
+
+
+# ==================== Dashboard Layout Services ====================
+
+def get_dashboard_layout(db: Session, user_id: str = "default") -> Optional[List[Dict[str, Any]]]:
+    """Get user's dashboard layout"""
+    layout_entry = db.query(DashboardLayout).filter(DashboardLayout.user_id == user_id).first()
+    return layout_entry.layout if layout_entry else None
+
+
+def set_dashboard_layout(db: Session, layout: List[Dict[str, Any]], user_id: str = "default") -> DashboardLayout:
+    """Set user's dashboard layout"""
+    layout_entry = db.query(DashboardLayout).filter(DashboardLayout.user_id == user_id).first()
+
+    if layout_entry:
+        layout_entry.layout = layout
+    else:
+        layout_entry = DashboardLayout(user_id=user_id, layout=layout)
+        db.add(layout_entry)
+
+    db.commit()
+    db.refresh(layout_entry)
+    return layout_entry
