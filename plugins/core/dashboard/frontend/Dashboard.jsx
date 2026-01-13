@@ -96,8 +96,10 @@ const WidgetContainer = ({ widget, onRemove }) => {
         );
       } else {
         // For other plugin widgets, load from their plugin directory
+        // Path is relative to plugins/core/dashboard/frontend/Dashboard.jsx
+        // Need to go up 3 levels to plugins/ then down to the plugin's frontend folder
         widgetComponentCache[cacheKey] = lazy(() =>
-          import(`../${widget.pluginName}/${widget.component}.jsx`)
+          import(`../../../${widget.pluginName}/frontend/${widget.component}.jsx`)
             .catch(err => {
               console.error(`Failed to load widget: ${widget.pluginName}/${widget.component}`, err);
               return {
