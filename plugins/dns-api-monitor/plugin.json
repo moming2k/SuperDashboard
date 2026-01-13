@@ -10,5 +10,70 @@
   },
   "frontendComponent": "MonitorDashboard",
   "icon": "📡",
-  "category": "monitoring"
+  "category": "monitoring",
+  "widgets": [
+    {
+      "id": "monitor-compact",
+      "displayName": "Monitor Status",
+      "description": "Quick view of monitor health",
+      "icon": "📡",
+      "component": "widgets/MonitorCompactWidget",
+      "preview": "Shows healthy vs total monitor counts",
+      "snapSizes": {
+        "default": "3x2",
+        "supported": ["3x2", "4x2"],
+        "min": "3x2",
+        "max": "4x3"
+      },
+      "defaultSize": {
+        "w": 3,
+        "h": 2,
+        "minW": 3,
+        "minH": 2
+      },
+      "category": "monitoring"
+    },
+    {
+      "id": "monitor-list",
+      "displayName": "Monitor List",
+      "description": "List of monitored endpoints",
+      "icon": "📡",
+      "component": "widgets/MonitorListWidget",
+      "preview": "Shows 5 monitors with status indicators",
+      "snapSizes": {
+        "default": "4x3",
+        "supported": ["4x3", "4x4", "6x4"],
+        "min": "4x3",
+        "max": "6x5"
+      },
+      "defaultSize": {
+        "w": 4,
+        "h": 3,
+        "minW": 4,
+        "minH": 3
+      },
+      "category": "monitoring"
+    },
+    {
+      "id": "monitor-detailed",
+      "displayName": "Monitor Dashboard",
+      "description": "Complete monitoring overview",
+      "icon": "📡",
+      "component": "widgets/MonitorDetailedWidget",
+      "preview": "Full monitor list with health statistics",
+      "snapSizes": {
+        "default": "6x4",
+        "supported": ["4x4", "6x4", "8x4", "8x5"],
+        "min": "4x4",
+        "max": "12x6"
+      },
+      "defaultSize": {
+        "w": 6,
+        "h": 4,
+        "minW": 4,
+        "minH": 4
+      },
+      "category": "monitoring"
+    }
+  ]
 }
