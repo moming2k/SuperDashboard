@@ -2,7 +2,7 @@
   "name": "dashboard",
   "displayName": "Dashboard",
   "description": "Grid-based modular dashboard with customizable widgets",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "tab": {
     "label": "Dashboard",
     "icon": "📊",
@@ -19,6 +19,12 @@
       "icon": "👋",
       "component": "WelcomeWidget",
       "preview": "Shows welcome message and system overview",
+      "snapSizes": {
+        "default": "6x2",
+        "supported": ["4x2", "6x2", "8x2", "12x2"],
+        "min": "4x2",
+        "max": "12x3"
+      },
       "defaultSize": {
         "w": 6,
         "h": 2,
@@ -34,6 +40,12 @@
       "icon": "📈",
       "component": "QuickStatsWidget",
       "preview": "Shows task count, plugin status, and system metrics",
+      "snapSizes": {
+        "default": "4x3",
+        "supported": ["3x2", "4x2", "4x3", "6x3"],
+        "min": "3x2",
+        "max": "6x4"
+      },
       "defaultSize": {
         "w": 4,
         "h": 3,

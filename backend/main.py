@@ -510,6 +510,7 @@ async def list_widgets(db: Session = Depends(get_db)):
                     "icon": widget.get('icon', '📦'),
                     "component": widget.get('component'),
                     "preview": widget.get('preview'),
+                    "snapSizes": widget.get('snapSizes'),
                     "defaultSize": widget.get('defaultSize', {"w": 4, "h": 3, "minW": 2, "minH": 2}),
                     "category": widget.get('category', 'general')
                 })
