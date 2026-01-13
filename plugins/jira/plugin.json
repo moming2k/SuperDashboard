@@ -18,6 +18,12 @@
       "icon": "🏷️",
       "component": "widgets/JiraRecentIssuesWidget",
       "preview": "Shows the 5 most recent Jira issues with quick status updates",
+      "snapSizes": {
+        "default": "6x4",
+        "supported": ["4x3", "6x3", "6x4", "8x4", "12x4"],
+        "min": "4x3",
+        "max": "12x6"
+      },
       "defaultSize": {
         "w": 6,
         "h": 4,
@@ -33,6 +39,12 @@
       "icon": "📊",
       "component": "widgets/JiraStatsWidget",
       "preview": "Displays issue counts by status and priority",
+      "snapSizes": {
+        "default": "4x3",
+        "supported": ["3x2", "4x2", "4x3", "6x3"],
+        "min": "3x2",
+        "max": "6x4"
+      },
       "defaultSize": {
         "w": 4,
         "h": 3,

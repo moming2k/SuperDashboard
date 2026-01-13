@@ -11,6 +11,68 @@ const ResponsiveGridLayout = WidthProvider(Responsive);
 // Widget component cache
 const widgetComponentCache = {};
 
+/**
+ * Parse snap size string to grid dimensions
+ * @param {string} snapSize - Format: "WxH" (e.g., "4x3")
+ * @returns {{ w: number, h: number }}
+ */
+function parseSnapSize(snapSize) {
+  if (!snapSize || typeof snapSize !== 'string') {
+    return { w: 4, h: 3 }; // Default fallback
+  }
+
+  const [w, h] = snapSize.toLowerCase().split('x').map(Number);
+
+  if (isNaN(w) || isNaN(h) || w <= 0 || h <= 0) {
+    return { w: 4, h: 3 }; // Default fallback
+  }
+
+  return { w, h };
+}
+
+/**
+ * Get widget size configuration from snapSizes or defaultSize
+ * @param {object} widget - Widget configuration object
+ * @returns {{ w: number, h: number, minW: number, minH: number, maxW: number, maxH: number }}
+ */
+function getWidgetSizeConfig(widget) {
+  const snapSizes = widget.snapSizes || {};
+  const defaultSize = widget.defaultSize || {};
+
+  // Parse default snap size
+  let defaultDims = { w: 4, h: 3 };
+  if (snapSizes.default) {
+    defaultDims = parseSnapSize(snapSizes.default);
+  } else if (defaultSize.w && defaultSize.h) {
+    defaultDims = { w: defaultSize.w, h: defaultSize.h };
+  }
+
+  // Parse min snap size
+  let minDims = { w: 2, h: 2 };
+  if (snapSizes.min) {
+    minDims = parseSnapSize(snapSizes.min);
+  } else if (defaultSize.minW && defaultSize.minH) {
+    minDims = { w: defaultSize.minW, h: defaultSize.minH };
+  }
+
+  // Parse max snap size
+  let maxDims = { w: 12, h: 6 };
+  if (snapSizes.max) {
+    maxDims = parseSnapSize(snapSizes.max);
+  } else if (defaultSize.maxW && defaultSize.maxH) {
+    maxDims = { w: defaultSize.maxW, h: defaultSize.maxH };
+  }
+
+  return {
+    w: defaultDims.w,
+    h: defaultDims.h,
+    minW: minDims.w,
+    minH: minDims.h,
+    maxW: maxDims.w,
+    maxH: maxDims.h
+  };
+}
+
 const WidgetContainer = ({ widget, onRemove }) => {
   // Dynamically load widget component
   const loadWidget = () => {
@@ -171,14 +233,18 @@ function Dashboard() {
     }
 
     const newWidget = { ...widget };
+    const sizeConfig = getWidgetSizeConfig(widget);
+
     const newLayoutItem = {
       i: widget.id,
       x: (layout.length * 2) % 12,
       y: Infinity, // Puts it at the bottom
-      w: widget.defaultSize?.w || 4,
-      h: widget.defaultSize?.h || 3,
-      minW: widget.defaultSize?.minW || 2,
-      minH: widget.defaultSize?.minH || 2,
+      w: sizeConfig.w,
+      h: sizeConfig.h,
+      minW: sizeConfig.minW,
+      minH: sizeConfig.minH,
+      maxW: sizeConfig.maxW,
+      maxH: sizeConfig.maxH,
     };
 
     const newLayout = [...layout, newLayoutItem];
@@ -260,10 +326,14 @@ function Dashboard() {
             breakpoints={{ lg: 1200, md: 996, sm: 768, xs: 480, xxs: 0 }}
             cols={{ lg: 12, md: 10, sm: 6, xs: 4, xxs: 2 }}
             rowHeight={100}
+            margin={[16, 16]}
+            containerPadding={[0, 0]}
             onLayoutChange={onLayoutChange}
             draggableHandle=".widget-header"
             compactType="vertical"
             preventCollision={false}
+            resizeHandles={['se']}
+            useCSSTransforms={true}
           >
             {activeWidgets.map((widget) => (
               <div key={widget.id}>
