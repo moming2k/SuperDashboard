@@ -76,6 +76,16 @@ class SystemConfig(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 
+class DashboardLayout(Base):
+    """Model for storing user's dashboard widget layout"""
+    __tablename__ = "dashboard_layouts"
+
+    user_id = Column(String, primary_key=True, index=True, default="default")  # Support multi-user in future
+    layout = Column(JSON, nullable=False, default=list)  # Stores react-grid-layout format
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
 def init_db():
     """Initialize all database tables"""
     Base.metadata.create_all(bind=engine)

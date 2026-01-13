@@ -9,5 +9,37 @@
     "order": 20
   },
   "replaces": "tasks",
-  "frontendComponent": "JiraTasks"
+  "frontendComponent": "JiraTasks",
+  "widgets": [
+    {
+      "id": "recent-issues",
+      "displayName": "Recent Issues",
+      "description": "View your most recent Jira issues at a glance",
+      "icon": "🏷️",
+      "component": "widgets/JiraRecentIssuesWidget",
+      "preview": "Shows the 5 most recent Jira issues with quick status updates",
+      "defaultSize": {
+        "w": 6,
+        "h": 4,
+        "minW": 4,
+        "minH": 3
+      },
+      "category": "productivity"
+    },
+    {
+      "id": "issue-stats",
+      "displayName": "Issue Statistics",
+      "description": "Quick overview of your Jira issue metrics",
+      "icon": "📊",
+      "component": "widgets/JiraStatsWidget",
+      "preview": "Displays issue counts by status and priority",
+      "defaultSize": {
+        "w": 4,
+        "h": 3,
+        "minW": 3,
+        "minH": 2
+      },
+      "category": "productivity"
+    }
+  ]
 }
