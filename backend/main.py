@@ -75,6 +75,9 @@ class PluginOrderUpdate(BaseModel):
 class PluginOrderBulkUpdate(BaseModel):
     orders: List[PluginOrderUpdate]
 
+class DashboardLayoutUpdate(BaseModel):
+    layout: List[Dict[str, Any]]
+
 class ChatMessage(BaseModel):
     role: str
     content: str
@@ -505,6 +508,87 @@ async def list_models():
             }
         ]
     }
+
+# ==================== Widget Management Endpoints ====================
+
+@app.get("/widgets")
+async def list_widgets(db: Session = Depends(get_db)):
+    """Get all available widgets from all plugins"""
+    widgets = []
+
+    def scan_plugin_for_widgets(plugin_path: str, plugin_name: str, is_core: bool = False):
+        """Scan a plugin for widget definitions"""
+        manifest_path = os.path.join(plugin_path, "plugin.json")
+
+        if not os.path.exists(manifest_path):
+            return
+
+        try:
+            with open(manifest_path, 'r') as f:
+                manifest = json.load(f)
+
+            # Check if plugin is enabled
+            if not services.is_plugin_enabled(db, plugin_name, is_core):
+                return
+
+            # Extract widgets from manifest
+            plugin_widgets = manifest.get('widgets', [])
+            for widget in plugin_widgets:
+                widgets.append({
+                    "id": f"{plugin_name}.{widget.get('id', 'widget')}",
+                    "pluginName": plugin_name,
+                    "displayName": widget.get('displayName', 'Unnamed Widget'),
+                    "description": widget.get('description', ''),
+                    "icon": widget.get('icon', '📦'),
+                    "component": widget.get('component'),
+                    "preview": widget.get('preview'),
+                    "defaultSize": widget.get('defaultSize', {"w": 4, "h": 3, "minW": 2, "minH": 2}),
+                    "category": widget.get('category', 'general')
+                })
+        except Exception as e:
+            print(f"Failed to load widgets from {plugin_name}: {e}")
+
+    # Scan all plugins
+    if os.path.exists(PLUGINS_DIR):
+        for item in os.listdir(PLUGINS_DIR):
+            item_path = os.path.join(PLUGINS_DIR, item)
+            if not os.path.isdir(item_path):
+                continue
+
+            # Handle core plugins
+            if item == "core":
+                for core_plugin in os.listdir(item_path):
+                    core_plugin_path = os.path.join(item_path, core_plugin)
+                    if os.path.isdir(core_plugin_path):
+                        scan_plugin_for_widgets(core_plugin_path, core_plugin, is_core=True)
+            else:
+                # Regular plugins
+                scan_plugin_for_widgets(item_path, item, is_core=False)
+
+    return {"widgets": widgets}
+
+
+# ==================== Dashboard Layout Endpoints ====================
+
+@app.get("/dashboard/layout")
+async def get_dashboard_layout(db: Session = Depends(get_db)):
+    """Get user's dashboard layout"""
+    layout = services.get_dashboard_layout(db)
+    return {"layout": layout or []}
+
+
+@app.put("/dashboard/layout")
+async def update_dashboard_layout(request: DashboardLayoutUpdate, db: Session = Depends(get_db)):
+    """Update user's dashboard layout"""
+    try:
+        services.set_dashboard_layout(db, request.layout)
+        return {
+            "message": "Dashboard layout saved successfully",
+            "layout": request.layout
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 # ==================== MCP (Model Context Protocol) Endpoints ====================
 
