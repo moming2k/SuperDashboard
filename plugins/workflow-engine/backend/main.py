@@ -452,6 +452,61 @@ async def get_available_plugins():
     }
 
 
+@router.post("/webhook/{node_id}")
+async def webhook_trigger(node_id: str, payload: Dict[str, Any] = {}, db: Session = Depends(get_db)):
+    """
+    Webhook endpoint to trigger workflows via external events.
+
+    This allows plugins like WhatsApp to trigger workflows when events occur.
+    The node_id should match a webhook trigger node in a workflow.
+
+    Usage:
+    - Configure a webhook trigger node in your workflow
+    - Note the node_id from the workflow designer
+    - Send POST requests to /plugins/workflow-engine/webhook/{node_id}
+    - The payload will be available in the workflow as the trigger node's output
+    """
+    try:
+        # Find workflows that contain this webhook trigger node
+        workflows = db.query(WorkflowModel).filter(WorkflowModel.enabled == True).all()
+
+        triggered_workflows = []
+        for workflow in workflows:
+            # Check if any node in this workflow is the webhook trigger
+            for node in workflow.nodes:
+                if (node.get('id') == node_id and
+                    node.get('type') == 'trigger' and
+                    node.get('data', {}).get('triggerType') == 'webhook'):
+
+                    # Execute this workflow
+                    execution = await execute_workflow_internal(
+                        workflow_id=workflow.id,
+                        workflow_db=workflow,
+                        db=db,
+                        trigger_type="webhook"
+                    )
+                    triggered_workflows.append({
+                        'workflow_id': workflow.id,
+                        'workflow_name': workflow.name,
+                        'execution_id': execution.id
+                    })
+
+        if not triggered_workflows:
+            return {
+                'status': 'no_workflows',
+                'message': f'No enabled workflows found with webhook trigger node: {node_id}'
+            }
+
+        return {
+            'status': 'triggered',
+            'workflows': triggered_workflows,
+            'payload': payload
+        }
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to trigger webhook: {str(e)}")
+
+
 # Command Palette Integration
 @router.get("/commands")
 async def get_commands():

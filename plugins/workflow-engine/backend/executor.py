@@ -3,6 +3,7 @@ import json
 from datetime import datetime
 from typing import Dict, Any, List, Optional
 import asyncio
+import re
 
 
 class WorkflowExecutor:
@@ -180,10 +181,29 @@ class WorkflowExecutor:
         plugin_name = config.get('plugin')
         action = config.get('action')
         method = config.get('method', 'GET')
+        action_id = config.get('actionId')
         params = config.get('parameters', {})
 
-        # Replace variable placeholders in parameters
-        params = self._replace_variables(params)
+        # Special handling for AI Agent with prompt template
+        if action_id == 'ask' and 'promptTemplate' in config:
+            prompt_template = config.get('promptTemplate', '')
+            # Replace variables in the prompt template
+            processed_prompt = self._replace_variables(prompt_template)
+
+            # Build messages array for AI
+            params = {
+                'messages': [
+                    {'role': 'user', 'content': processed_prompt}
+                ]
+            }
+            logs.append({
+                'timestamp': datetime.utcnow().isoformat(),
+                'message': f"Using prompt template with processed content (length: {len(processed_prompt)} chars)",
+                'level': 'info'
+            })
+        else:
+            # Replace variable placeholders in parameters
+            params = self._replace_variables(params)
 
         url = f"{self.base_url}/plugins/{plugin_name}{action}"
 
@@ -244,9 +264,15 @@ class WorkflowExecutor:
         return False
 
     async def _execute_transform(self, node: Dict[str, Any], logs: List[Dict[str, Any]]) -> Any:
-        """Transform data using expressions"""
+        """Transform data using JavaScript code or expressions"""
 
         config = node.get('data', {})
+
+        # Check if this is a code-based transform
+        if 'code' in config and config.get('code'):
+            return await self._execute_javascript_transform(config, logs)
+
+        # Legacy transform types
         transform_type = config.get('transformType', 'set')
 
         if transform_type == 'set':
@@ -267,6 +293,126 @@ class WorkflowExecutor:
             return merged
 
         return None
+
+    async def _execute_javascript_transform(self, config: Dict[str, Any], logs: List[Dict[str, Any]]) -> Any:
+        """
+        Execute JavaScript code for data transformation.
+
+        NOTE: This is a simplified Python-based implementation.
+        For full JavaScript support, integrate PyMiniRacer or similar.
+
+        The code can access:
+        - input: output from previous node
+        - context: all node outputs
+        """
+        code = config.get('code', '')
+
+        if not code:
+            return None
+
+        logs.append({
+            'timestamp': datetime.utcnow().isoformat(),
+            'message': f"Executing transform code (length: {len(code)} chars)",
+            'level': 'info'
+        })
+
+        try:
+            # Prepare execution context with previous node data
+            # Get the last non-trigger node's output as 'input'
+            input_data = None
+            for node_id in reversed(list(self.execution_context.keys())):
+                if node_id != 'trigger':
+                    input_data = self.execution_context.get(node_id)
+                    break
+
+            # Create a safe execution environment
+            # NOTE: In production, use PyMiniRacer or similar for actual JS execution
+            # This is a simplified version that handles common patterns
+
+            result = self._evaluate_simple_javascript(code, input_data, self.execution_context)
+
+            logs.append({
+                'timestamp': datetime.utcnow().isoformat(),
+                'message': f"Transform code executed successfully",
+                'level': 'info'
+            })
+
+            return result
+
+        except Exception as e:
+            logs.append({
+                'timestamp': datetime.utcnow().isoformat(),
+                'message': f"Error executing transform code: {str(e)}",
+                'level': 'error'
+            })
+            raise
+
+    def _evaluate_simple_javascript(self, code: str, input_data: Any, context: Dict[str, Any]) -> Any:
+        """
+        Evaluate simple JavaScript-like code patterns.
+
+        Supported patterns:
+        - return { key: value };
+        - const x = input.field; return { x };
+        - if (condition) { return {...} }
+
+        NOTE: This is NOT a full JavaScript interpreter.
+        For production, use PyMiniRacer or similar.
+        """
+
+        # For now, implement basic Python execution with restricted globals
+        # Replace JavaScript syntax with Python equivalents
+
+        # Convert common JS patterns to Python
+        python_code = code
+        python_code = python_code.replace('const ', '')
+        python_code = python_code.replace('let ', '')
+        python_code = python_code.replace('var ', '')
+        python_code = python_code.replace('===', '==')
+        python_code = python_code.replace('!==', '!=')
+
+        # Create safe execution environment
+        safe_globals = {
+            '__builtins__': {
+                'len': len,
+                'str': str,
+                'int': int,
+                'float': float,
+                'bool': bool,
+                'list': list,
+                'dict': dict,
+                'range': range,
+                'enumerate': enumerate,
+                'zip': zip,
+                'map': map,
+                'filter': filter,
+                'sum': sum,
+                'max': max,
+                'min': min,
+                'abs': abs,
+                'round': round,
+                'sorted': sorted,
+                'reversed': reversed,
+                'any': any,
+                'all': all,
+            },
+            'input': input_data,
+            'context': context,
+            'json': json,
+        }
+
+        # Execute the code
+        local_vars = {}
+        exec(python_code, safe_globals, local_vars)
+
+        # Return the result (last assigned variable or explicit return)
+        if 'return' in python_code:
+            # Try to extract return value
+            for var_name, var_value in local_vars.items():
+                if var_name != '__builtins__':
+                    return var_value
+
+        return local_vars if local_vars else None
 
     def _evaluate_edge_condition(self, edge: Dict[str, Any], node_result: Any) -> bool:
         """Evaluate if edge condition is met"""

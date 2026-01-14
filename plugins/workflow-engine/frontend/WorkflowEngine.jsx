@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 
 const API_BASE = 'http://localhost:8000';
 
@@ -10,9 +10,10 @@ function WorkflowEngine() {
   const [executions, setExecutions] = useState([]);
   const [availablePlugins, setAvailablePlugins] = useState([]);
   const [selectedNode, setSelectedNode] = useState(null);
-  const [view, setView] = useState('list'); // 'list', 'designer', 'executions'
-  const [draggedNode, setDraggedNode] = useState(null);
-  const [connecting, setConnecting] = useState(null);
+  const [view, setView] = useState('list');
+  const [draggedPaletteNode, setDraggedPaletteNode] = useState(null);
+  const [connectionStart, setConnectionStart] = useState(null);
+  const [tempConnection, setTempConnection] = useState(null);
   const canvasRef = useRef(null);
 
   useEffect(() => {
@@ -138,16 +139,6 @@ function WorkflowEngine() {
     }
   };
 
-  const addNode = (type, data = {}) => {
-    const newNode = {
-      id: `node_${Date.now()}`,
-      type,
-      position: { x: 100, y: 100 + nodes.length * 80 },
-      data
-    };
-    setNodes([...nodes, newNode]);
-  };
-
   const updateNode = (nodeId, updates) => {
     setNodes(nodes.map(node =>
       node.id === nodeId ? { ...node, ...updates } : node
@@ -157,21 +148,14 @@ function WorkflowEngine() {
   const deleteNode = (nodeId) => {
     setNodes(nodes.filter(node => node.id !== nodeId));
     setEdges(edges.filter(edge => edge.source !== nodeId && edge.target !== nodeId));
-  };
-
-  const addEdge = (sourceId, targetId) => {
-    const newEdge = {
-      id: `edge_${Date.now()}`,
-      source: sourceId,
-      target: targetId
-    };
-    setEdges([...edges, newEdge]);
-    setConnecting(null);
+    if (selectedNode?.id === nodeId) {
+      setSelectedNode(null);
+    }
   };
 
   const handleCanvasDrop = (e) => {
     e.preventDefault();
-    if (!draggedNode) return;
+    if (!draggedPaletteNode) return;
 
     const rect = canvasRef.current.getBoundingClientRect();
     const x = e.clientX - rect.left;
@@ -179,38 +163,52 @@ function WorkflowEngine() {
 
     const newNode = {
       id: `node_${Date.now()}`,
-      type: draggedNode.type,
+      type: draggedPaletteNode.type,
       position: { x, y },
-      data: draggedNode.data || {}
+      data: draggedPaletteNode.data || {}
     };
 
     setNodes([...nodes, newNode]);
-    setDraggedNode(null);
+    setDraggedPaletteNode(null);
   };
 
-  const handleNodeDragStart = (node) => {
-    setSelectedNode(node);
-  };
+  const startConnection = useCallback((nodeId, event) => {
+    event.stopPropagation();
+    setConnectionStart(nodeId);
 
-  const handleNodeDrag = (nodeId, deltaX, deltaY) => {
-    updateNode(nodeId, {
-      position: {
-        x: nodes.find(n => n.id === nodeId).position.x + deltaX,
-        y: nodes.find(n => n.id === nodeId).position.y + deltaY
+    const updateTempConnection = (e) => {
+      if (canvasRef.current) {
+        const rect = canvasRef.current.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+        const y = e.clientY - rect.top;
+        setTempConnection({ x, y });
       }
-    });
-  };
+    };
 
-  const startConnection = (nodeId) => {
-    setConnecting(nodeId);
-  };
+    const endConnection = () => {
+      setConnectionStart(null);
+      setTempConnection(null);
+      document.removeEventListener('mousemove', updateTempConnection);
+      document.removeEventListener('mouseup', endConnection);
+    };
 
-  const endConnection = (nodeId) => {
-    if (connecting && connecting !== nodeId) {
-      addEdge(connecting, nodeId);
+    document.addEventListener('mousemove', updateTempConnection);
+    document.addEventListener('mouseup', endConnection);
+  }, []);
+
+  const completeConnection = useCallback((targetNodeId, event) => {
+    event.stopPropagation();
+    if (connectionStart && connectionStart !== targetNodeId) {
+      const newEdge = {
+        id: `edge_${Date.now()}`,
+        source: connectionStart,
+        target: targetNodeId
+      };
+      setEdges([...edges, newEdge]);
     }
-    setConnecting(null);
-  };
+    setConnectionStart(null);
+    setTempConnection(null);
+  }, [connectionStart, edges]);
 
   return (
     <div className="flex flex-col h-full bg-bg-dark text-text-main p-6">
@@ -258,25 +256,25 @@ function WorkflowEngine() {
           workflow={currentWorkflow}
           setWorkflow={setCurrentWorkflow}
           nodes={nodes}
+          setNodes={setNodes}
           edges={edges}
+          setEdges={setEdges}
           onSave={saveWorkflow}
-          onAddNode={addNode}
           onUpdateNode={updateNode}
           onDeleteNode={deleteNode}
-          onAddEdge={addEdge}
           availablePlugins={availablePlugins}
           selectedNode={selectedNode}
           setSelectedNode={setSelectedNode}
           canvasRef={canvasRef}
-          draggedNode={draggedNode}
-          setDraggedNode={setDraggedNode}
-          connecting={connecting}
-          startConnection={startConnection}
-          endConnection={endConnection}
+          draggedPaletteNode={draggedPaletteNode}
+          setDraggedPaletteNode={setDraggedPaletteNode}
           onCanvasDrop={handleCanvasDrop}
-          onNodeDrag={handleNodeDrag}
           executions={executions}
           setView={setView}
+          connectionStart={connectionStart}
+          tempConnection={tempConnection}
+          startConnection={startConnection}
+          completeConnection={completeConnection}
         />
       )}
     </div>
@@ -349,25 +347,25 @@ function WorkflowDesigner({
   workflow,
   setWorkflow,
   nodes,
+  setNodes,
   edges,
+  setEdges,
   onSave,
-  onAddNode,
   onUpdateNode,
   onDeleteNode,
-  onAddEdge,
   availablePlugins,
   selectedNode,
   setSelectedNode,
   canvasRef,
-  draggedNode,
-  setDraggedNode,
-  connecting,
-  startConnection,
-  endConnection,
+  draggedPaletteNode,
+  setDraggedPaletteNode,
   onCanvasDrop,
-  onNodeDrag,
   executions,
-  setView
+  setView,
+  connectionStart,
+  tempConnection,
+  startConnection,
+  completeConnection
 }) {
   const [showNodePalette, setShowNodePalette] = useState(true);
   const [showExecutions, setShowExecutions] = useState(false);
@@ -378,8 +376,7 @@ function WorkflowDesigner({
       {showNodePalette && (
         <NodePalette
           availablePlugins={availablePlugins}
-          setDraggedNode={setDraggedNode}
-          onAddNode={onAddNode}
+          setDraggedPaletteNode={setDraggedPaletteNode}
         />
       )}
 
@@ -441,41 +438,19 @@ function WorkflowDesigner({
           className="flex-1 bg-glass backdrop-blur-xl border border-glass-border rounded-xl relative overflow-auto"
           onDrop={onCanvasDrop}
           onDragOver={(e) => e.preventDefault()}
+          onClick={() => setSelectedNode(null)}
           style={{ minHeight: '500px' }}
         >
           {/* Grid background */}
-          <div className="absolute inset-0 opacity-10"
+          <div className="absolute inset-0 opacity-10 pointer-events-none"
             style={{
               backgroundImage: 'radial-gradient(circle, #6366f1 1px, transparent 1px)',
               backgroundSize: '20px 20px'
             }}
           />
 
-          {/* Edges */}
+          {/* Edges and Connections */}
           <svg className="absolute inset-0 pointer-events-none" style={{ zIndex: 1 }}>
-            {edges.map(edge => {
-              const sourceNode = nodes.find(n => n.id === edge.source);
-              const targetNode = nodes.find(n => n.id === edge.target);
-              if (!sourceNode || !targetNode) return null;
-
-              const x1 = sourceNode.position.x + 75;
-              const y1 = sourceNode.position.y + 40;
-              const x2 = targetNode.position.x + 75;
-              const y2 = targetNode.position.y + 40;
-
-              return (
-                <line
-                  key={edge.id}
-                  x1={x1}
-                  y1={y1}
-                  x2={x2}
-                  y2={y2}
-                  stroke="#6366f1"
-                  strokeWidth="2"
-                  markerEnd="url(#arrowhead)"
-                />
-              );
-            })}
             <defs>
               <marker
                 id="arrowhead"
@@ -488,6 +463,43 @@ function WorkflowDesigner({
                 <polygon points="0 0, 10 3, 0 6" fill="#6366f1" />
               </marker>
             </defs>
+
+            {/* Existing edges */}
+            {edges.map(edge => {
+              const sourceNode = nodes.find(n => n.id === edge.source);
+              const targetNode = nodes.find(n => n.id === edge.target);
+              if (!sourceNode || !targetNode) return null;
+
+              const x1 = sourceNode.position.x + 150;
+              const y1 = sourceNode.position.y + 40;
+              const x2 = targetNode.position.x;
+              const y2 = targetNode.position.y + 40;
+
+              const midX = (x1 + x2) / 2;
+
+              return (
+                <g key={edge.id}>
+                  <path
+                    d={`M ${x1} ${y1} C ${midX} ${y1}, ${midX} ${y2}, ${x2} ${y2}`}
+                    stroke="#6366f1"
+                    strokeWidth="2"
+                    fill="none"
+                    markerEnd="url(#arrowhead)"
+                  />
+                </g>
+              );
+            })}
+
+            {/* Temporary connection line while dragging */}
+            {connectionStart && tempConnection && (
+              <path
+                d={`M ${nodes.find(n => n.id === connectionStart).position.x + 150} ${nodes.find(n => n.id === connectionStart).position.y + 40} L ${tempConnection.x} ${tempConnection.y}`}
+                stroke="#a855f7"
+                strokeWidth="2"
+                strokeDasharray="5,5"
+                fill="none"
+              />
+            )}
           </svg>
 
           {/* Nodes */}
@@ -496,21 +508,25 @@ function WorkflowDesigner({
               key={node.id}
               node={node}
               isSelected={selectedNode?.id === node.id}
-              isConnecting={connecting === node.id}
-              onClick={() => setSelectedNode(node)}
+              isConnecting={connectionStart === node.id}
+              onClick={(e) => {
+                e.stopPropagation();
+                setSelectedNode(node);
+              }}
               onDelete={() => onDeleteNode(node.id)}
               onUpdate={(updates) => onUpdateNode(node.id, updates)}
-              onStartConnection={() => startConnection(node.id)}
-              onEndConnection={() => endConnection(node.id)}
-              onDrag={(deltaX, deltaY) => onNodeDrag(node.id, deltaX, deltaY)}
+              onStartConnection={(e) => startConnection(node.id, e)}
+              onCompleteConnection={(e) => completeConnection(node.id, e)}
+              setNodes={setNodes}
+              nodes={nodes}
             />
           ))}
 
           {nodes.length === 0 && (
-            <div className="absolute inset-0 flex items-center justify-center text-text-muted">
+            <div className="absolute inset-0 flex items-center justify-center text-text-muted pointer-events-none">
               <div className="text-center">
                 <p className="text-lg">Drag nodes from the palette to start building</p>
-                <p className="text-sm mt-2">Connect nodes to create a workflow</p>
+                <p className="text-sm mt-2">Drag from the right handle to connect nodes</p>
               </div>
             </div>
           )}
@@ -539,26 +555,51 @@ function WorkflowDesigner({
 }
 
 // Node Palette Component
-function NodePalette({ availablePlugins, setDraggedNode, onAddNode }) {
-  const nodeTypes = [
-    { type: 'trigger', label: 'Trigger', icon: '⚡', color: 'bg-green-500' },
+function NodePalette({ availablePlugins, setDraggedPaletteNode }) {
+  const triggerTypes = [
+    { type: 'schedule', label: 'Schedule (Cron)', icon: '⏰', color: 'bg-green-500', data: { triggerType: 'schedule' } },
+    { type: 'webhook', label: 'Webhook', icon: '🔔', color: 'bg-blue-500', data: { triggerType: 'webhook' } },
+    { type: 'manual', label: 'Manual', icon: '👆', color: 'bg-purple-500', data: { triggerType: 'manual' } }
+  ];
+
+  const logicNodes = [
     { type: 'delay', label: 'Delay', icon: '⏱️', color: 'bg-yellow-500' },
     { type: 'condition', label: 'Condition', icon: '❓', color: 'bg-blue-500' },
-    { type: 'transform', label: 'Transform', icon: '🔄', color: 'bg-purple-500' }
+    { type: 'transform', label: 'Code', icon: '💻', color: 'bg-purple-500' }
   ];
 
   return (
     <div className="w-64 bg-glass backdrop-blur-xl border border-glass-border rounded-xl p-4 overflow-y-auto">
       <h3 className="text-lg font-bold mb-4">Node Palette</h3>
 
-      {/* Basic Nodes */}
+      {/* Trigger Nodes */}
       <div className="mb-6">
-        <p className="text-sm text-text-muted mb-2">Basic Nodes</p>
-        {nodeTypes.map(nodeType => (
+        <p className="text-sm text-text-muted mb-2 font-semibold">⚡ Triggers</p>
+        {triggerTypes.map(trigger => (
+          <div
+            key={trigger.type}
+            draggable
+            onDragStart={() => setDraggedPaletteNode({ type: 'trigger', data: trigger.data })}
+            className="bg-bg-card border border-glass-border rounded-lg p-3 mb-2 cursor-move hover:border-primary transition-all"
+          >
+            <div className="flex items-center gap-2">
+              <span className={`w-8 h-8 ${trigger.color} rounded flex items-center justify-center text-sm`}>
+                {trigger.icon}
+              </span>
+              <span className="text-sm font-medium">{trigger.label}</span>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Logic Nodes */}
+      <div className="mb-6">
+        <p className="text-sm text-text-muted mb-2 font-semibold">🔧 Logic</p>
+        {logicNodes.map(nodeType => (
           <div
             key={nodeType.type}
             draggable
-            onDragStart={() => setDraggedNode({ type: nodeType.type, data: {} })}
+            onDragStart={() => setDraggedPaletteNode({ type: nodeType.type, data: {} })}
             className="bg-bg-card border border-glass-border rounded-lg p-3 mb-2 cursor-move hover:border-primary transition-all"
           >
             <div className="flex items-center gap-2">
@@ -573,7 +614,7 @@ function NodePalette({ availablePlugins, setDraggedNode, onAddNode }) {
 
       {/* Plugin Actions */}
       <div>
-        <p className="text-sm text-text-muted mb-2">Plugin Actions</p>
+        <p className="text-sm text-text-muted mb-2 font-semibold">🔌 Plugin Actions</p>
         {availablePlugins.map(plugin => (
           <div key={plugin.name} className="mb-4">
             <p className="text-xs font-medium mb-2">{plugin.icon} {plugin.displayName}</p>
@@ -581,13 +622,14 @@ function NodePalette({ availablePlugins, setDraggedNode, onAddNode }) {
               <div
                 key={action.id}
                 draggable
-                onDragStart={() => setDraggedNode({
+                onDragStart={() => setDraggedPaletteNode({
                   type: 'plugin-action',
                   data: {
                     plugin: plugin.name,
                     action: action.endpoint,
                     method: action.method,
                     actionName: action.name,
+                    actionId: action.id,
                     parameters: {}
                   }
                 })}
@@ -612,11 +654,13 @@ function WorkflowNode({
   onDelete,
   onUpdate,
   onStartConnection,
-  onEndConnection,
-  onDrag
+  onCompleteConnection,
+  setNodes,
+  nodes
 }) {
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
+  const nodeRef = useRef(null);
 
   const getNodeColor = (type) => {
     const colors = {
@@ -629,43 +673,69 @@ function WorkflowNode({
     return colors[type] || 'bg-gray-500';
   };
 
-  const getNodeIcon = (type) => {
+  const getNodeIcon = (type, data) => {
+    if (type === 'trigger') {
+      const icons = {
+        schedule: '⏰',
+        webhook: '🔔',
+        manual: '👆'
+      };
+      return icons[data?.triggerType] || '⚡';
+    }
     const icons = {
-      trigger: '⚡',
       'plugin-action': '🔌',
       condition: '❓',
       delay: '⏱️',
-      transform: '🔄'
+      transform: '💻'
     };
     return icons[type] || '📦';
   };
 
   const getNodeLabel = (node) => {
+    if (node.type === 'trigger') {
+      const labels = {
+        schedule: 'Schedule',
+        webhook: 'Webhook',
+        manual: 'Manual'
+      };
+      return labels[node.data?.triggerType] || 'Trigger';
+    }
     if (node.type === 'plugin-action') {
       return node.data?.actionName || 'Plugin Action';
+    }
+    if (node.type === 'transform') {
+      return 'Code';
     }
     return node.type.charAt(0).toUpperCase() + node.type.slice(1);
   };
 
   const handleMouseDown = (e) => {
     if (e.target.closest('.node-handle')) return;
+    e.stopPropagation();
     setIsDragging(true);
     setDragStart({ x: e.clientX, y: e.clientY });
   };
 
-  const handleMouseMove = (e) => {
-    if (!isDragging) return;
-    const deltaX = e.clientX - dragStart.x;
-    const deltaY = e.clientY - dragStart.y;
-    onDrag(deltaX, deltaY);
-    setDragStart({ x: e.clientX, y: e.clientY });
-  };
-
-  const handleMouseUp = () => {
-    setIsDragging(false);
-  };
-
   useEffect(() => {
+    const handleMouseMove = (e) => {
+      if (!isDragging) return;
+      const deltaX = e.clientX - dragStart.x;
+      const deltaY = e.clientY - dragStart.y;
+
+      onUpdate({
+        position: {
+          x: node.position.x + deltaX,
+          y: node.position.y + deltaY
+        }
+      });
+
+      setDragStart({ x: e.clientX, y: e.clientY });
+    };
+
+    const handleMouseUp = () => {
+      setIsDragging(false);
+    };
+
     if (isDragging) {
       document.addEventListener('mousemove', handleMouseMove);
       document.addEventListener('mouseup', handleMouseUp);
@@ -674,26 +744,26 @@ function WorkflowNode({
         document.removeEventListener('mouseup', handleMouseUp);
       };
     }
-  }, [isDragging]);
+  }, [isDragging, dragStart, node.position, onUpdate]);
 
   return (
     <div
-      className={`absolute bg-bg-card border-2 rounded-xl p-3 cursor-move transition-all ${
-        isSelected ? 'border-primary shadow-lg shadow-primary/50' : 'border-glass-border'
-      } ${isConnecting ? 'ring-2 ring-accent' : ''}`}
+      ref={nodeRef}
+      className={`absolute bg-bg-card border-2 rounded-xl p-3 transition-all ${
+        isSelected ? 'border-primary shadow-lg shadow-primary/50 z-20' : 'border-glass-border z-10'
+      } ${isConnecting ? 'ring-2 ring-accent' : ''} ${isDragging ? 'cursor-grabbing' : 'cursor-grab'}`}
       style={{
         left: node.position.x,
         top: node.position.y,
-        width: '150px',
-        zIndex: 10
+        width: '150px'
       }}
       onClick={onClick}
       onMouseDown={handleMouseDown}
     >
       {/* Node Header */}
       <div className="flex items-center gap-2 mb-2">
-        <span className={`w-6 h-6 ${getNodeColor(node.type)} rounded flex items-center justify-center text-xs`}>
-          {getNodeIcon(node.type)}
+        <span className={`w-6 h-6 ${getNodeColor(node.type)} rounded flex items-center justify-center text-xs flex-shrink-0`}>
+          {getNodeIcon(node.type, node.data)}
         </span>
         <span className="text-xs font-medium flex-1 truncate">{getNodeLabel(node)}</span>
         <button
@@ -708,22 +778,20 @@ function WorkflowNode({
       </div>
 
       {/* Connection Handles */}
-      <div className="flex justify-between mt-2">
+      <div className="flex justify-between mt-2 relative">
+        {/* Input handle (left) */}
         <button
-          className="node-handle w-4 h-4 bg-primary rounded-full hover:scale-125 transition-all"
-          onClick={(e) => {
-            e.stopPropagation();
-            onEndConnection();
-          }}
+          className="node-handle w-4 h-4 bg-blue-500 rounded-full hover:scale-125 transition-all cursor-pointer absolute left-[-8px] top-[50%] translate-y-[-50%]"
+          onMouseUp={onCompleteConnection}
           title="Connect from another node"
+          style={{ zIndex: 50 }}
         />
+        {/* Output handle (right) */}
         <button
-          className="node-handle w-4 h-4 bg-accent rounded-full hover:scale-125 transition-all"
-          onClick={(e) => {
-            e.stopPropagation();
-            onStartConnection();
-          }}
-          title="Connect to another node"
+          className="node-handle w-4 h-4 bg-accent rounded-full hover:scale-125 transition-all cursor-pointer absolute right-[-8px] top-[50%] translate-y-[-50%]"
+          onMouseDown={onStartConnection}
+          title="Drag to connect to another node"
+          style={{ zIndex: 50 }}
         />
       </div>
     </div>
@@ -743,7 +811,7 @@ function NodeProperties({ node, onUpdate, onClose, availablePlugins }) {
   };
 
   return (
-    <div className="w-80 bg-glass backdrop-blur-xl border border-glass-border rounded-xl p-4 overflow-y-auto">
+    <div className="w-96 bg-glass backdrop-blur-xl border border-glass-border rounded-xl p-4 overflow-y-auto">
       <div className="flex justify-between items-center mb-4">
         <h3 className="text-lg font-bold">Node Properties</h3>
         <button onClick={onClose} className="text-text-muted hover:text-text-main">✕</button>
@@ -755,6 +823,46 @@ function NodeProperties({ node, onUpdate, onClose, availablePlugins }) {
           <div className="bg-bg-card rounded-lg px-3 py-2 text-sm">{node.type}</div>
         </div>
 
+        {/* Trigger Node Configuration */}
+        {node.type === 'trigger' && (
+          <>
+            <div>
+              <label className="block text-sm text-text-muted mb-1">Trigger Type</label>
+              <select
+                value={data.triggerType || 'schedule'}
+                onChange={(e) => setData({ ...data, triggerType: e.target.value })}
+                className="w-full bg-bg-card border border-glass-border rounded-lg px-3 py-2"
+              >
+                <option value="schedule">Schedule (Cron)</option>
+                <option value="webhook">Webhook</option>
+                <option value="manual">Manual</option>
+              </select>
+            </div>
+
+            {data.triggerType === 'webhook' && (
+              <div>
+                <label className="block text-sm text-text-muted mb-1">Webhook Source</label>
+                <select
+                  value={data.webhookPlugin || ''}
+                  onChange={(e) => setData({ ...data, webhookPlugin: e.target.value })}
+                  className="w-full bg-bg-card border border-glass-border rounded-lg px-3 py-2"
+                >
+                  <option value="">Select plugin...</option>
+                  <option value="whatsapp">WhatsApp (incoming message)</option>
+                  <option value="jira">Jira (issue update)</option>
+                  <option value="custom">Custom webhook URL</option>
+                </select>
+                {data.webhookPlugin && (
+                  <p className="text-xs text-text-muted mt-2">
+                    Webhook URL: /plugins/workflow-engine/webhook/{node.id}
+                  </p>
+                )}
+              </div>
+            )}
+          </>
+        )}
+
+        {/* Plugin Action Configuration */}
         {node.type === 'plugin-action' && (
           <>
             <div>
@@ -765,25 +873,57 @@ function NodeProperties({ node, onUpdate, onClose, availablePlugins }) {
               <label className="block text-sm text-text-muted mb-1">Action</label>
               <div className="bg-bg-card rounded-lg px-3 py-2 text-sm">{data.actionName}</div>
             </div>
-            <div>
-              <label className="block text-sm text-text-muted mb-1">Parameters (JSON)</label>
-              <textarea
-                value={JSON.stringify(data.parameters || {}, null, 2)}
-                onChange={(e) => {
-                  try {
-                    const params = JSON.parse(e.target.value);
-                    setData({ ...data, parameters: params });
-                  } catch (err) {
-                    // Invalid JSON, ignore
-                  }
-                }}
-                className="w-full bg-bg-card border border-glass-border rounded-lg px-3 py-2 text-sm font-mono"
-                rows={6}
-              />
-            </div>
+
+            {/* Special handling for AI Agent */}
+            {data.actionId === 'ask' && (
+              <div>
+                <label className="block text-sm text-text-muted mb-1">Prompt Template</label>
+                <textarea
+                  value={data.promptTemplate || ''}
+                  onChange={(e) => setData({ ...data, promptTemplate: e.target.value })}
+                  className="w-full bg-bg-card border border-glass-border rounded-lg px-3 py-2 text-sm font-mono"
+                  rows={6}
+                  placeholder="Enter your prompt. Use {{node_id.field}} to insert data from previous nodes.
+
+Example:
+Please analyze this WhatsApp message:
+{{whatsapp_node.body}}
+
+And provide a summary."
+                />
+                <p className="text-xs text-text-muted mt-1">
+                  Use <code>{'{{node_id.field}}'}</code> to reference previous node outputs
+                </p>
+              </div>
+            )}
+
+            {/* Standard parameters */}
+            {data.actionId !== 'ask' && (
+              <div>
+                <label className="block text-sm text-text-muted mb-1">Parameters (JSON)</label>
+                <textarea
+                  value={JSON.stringify(data.parameters || {}, null, 2)}
+                  onChange={(e) => {
+                    try {
+                      const params = JSON.parse(e.target.value);
+                      setData({ ...data, parameters: params });
+                    } catch (err) {
+                      // Invalid JSON, keep editing
+                    }
+                  }}
+                  className="w-full bg-bg-card border border-glass-border rounded-lg px-3 py-2 text-sm font-mono"
+                  rows={6}
+                  placeholder='{\n  "to": "{{upstream.phone}}",\n  "body": "{{ai.response}}"\n}'
+                />
+                <p className="text-xs text-text-muted mt-1">
+                  Use <code>{'{{node_id.field}}'}</code> for variable substitution
+                </p>
+              </div>
+            )}
           </>
         )}
 
+        {/* Delay Node */}
         {node.type === 'delay' && (
           <div>
             <label className="block text-sm text-text-muted mb-1">Delay (seconds)</label>
@@ -792,10 +932,12 @@ function NodeProperties({ node, onUpdate, onClose, availablePlugins }) {
               value={data.delay || 1}
               onChange={(e) => setData({ ...data, delay: parseInt(e.target.value) })}
               className="w-full bg-bg-card border border-glass-border rounded-lg px-3 py-2"
+              min="1"
             />
           </div>
         )}
 
+        {/* Condition Node */}
         {node.type === 'condition' && (
           <>
             <div>
@@ -815,11 +957,11 @@ function NodeProperties({ node, onUpdate, onClose, availablePlugins }) {
                 onChange={(e) => setData({ ...data, operator: e.target.value })}
                 className="w-full bg-bg-card border border-glass-border rounded-lg px-3 py-2"
               >
-                <option value="equals">Equals</option>
-                <option value="not_equals">Not Equals</option>
+                <option value="equals">Equals (==)</option>
+                <option value="not_equals">Not Equals (!=)</option>
                 <option value="contains">Contains</option>
-                <option value="greater_than">Greater Than</option>
-                <option value="less_than">Less Than</option>
+                <option value="greater_than">Greater Than ({'>'})</option>
+                <option value="less_than">Less Than ({'<'})</option>
               </select>
             </div>
             <div>
@@ -829,7 +971,43 @@ function NodeProperties({ node, onUpdate, onClose, availablePlugins }) {
                 value={data.rightValue || ''}
                 onChange={(e) => setData({ ...data, rightValue: e.target.value })}
                 className="w-full bg-bg-card border border-glass-border rounded-lg px-3 py-2"
+                placeholder="value or {{node_id.field}}"
               />
+            </div>
+          </>
+        )}
+
+        {/* Transform/Code Node */}
+        {node.type === 'transform' && (
+          <>
+            <div>
+              <label className="block text-sm text-text-muted mb-1">Code (JavaScript)</label>
+              <textarea
+                value={data.code || ''}
+                onChange={(e) => setData({ ...data, code: e.target.value })}
+                className="w-full bg-bg-card border border-glass-border rounded-lg px-3 py-2 text-sm font-mono"
+                rows={12}
+                placeholder={`// Available variables:
+// - input: previous node output
+// - context: all node outputs
+
+// Example 1: Extract data
+const phoneNumber = input.from_number;
+return { phone: phoneNumber };
+
+// Example 2: Transform data
+const messages = input.messages.map(m => m.body);
+return { allMessages: messages.join('\\n') };
+
+// Example 3: Conditional logic
+if (input.count > 5) {
+  return { alert: 'High count!' };
+}
+return { alert: 'Normal' };`}
+              />
+              <p className="text-xs text-text-muted mt-1">
+                Write JavaScript code. Must return an object or value.
+              </p>
             </div>
           </>
         )}
