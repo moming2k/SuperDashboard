@@ -1,6 +1,32 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { EditorView, basicSetup } from 'codemirror';
+import { javascript } from '@codemirror/lang-javascript';
+import { oneDark } from '@codemirror/theme-one-dark';
+import { formatDistanceToNow, format } from 'date-fns';
+import { z } from 'zod';
 
 const API_BASE = 'http://localhost:8000';
+
+// Zod validation schemas
+const CronRegex = /^(\*|[0-9,\-\/]+)\s+(\*|[0-9,\-\/]+)\s+(\*|[0-9,\-\/]+)\s+(\*|[0-9,\-\/]+)\s+(\*|[0-9,\-\/]+)$/;
+
+const WorkflowSchema = z.object({
+  name: z.string().min(1, "Workflow name is required").max(100, "Name too long"),
+  description: z.string().max(500, "Description too long").optional(),
+  enabled: z.boolean(),
+  schedule: z.string().regex(CronRegex, "Invalid cron expression (format: minute hour day month day_of_week)").optional().or(z.literal('')),
+  nodes: z.array(z.any()).min(1, "Workflow must have at least one node"),
+  edges: z.array(z.any())
+}).refine((data) => {
+  // If schedule is provided and workflow is enabled, it should be valid
+  if (data.enabled && data.schedule && data.schedule.length > 0) {
+    return CronRegex.test(data.schedule);
+  }
+  return true;
+}, {
+  message: "Enabled workflows with schedules must have valid cron expressions",
+  path: ["schedule"]
+});
 
 function WorkflowEngine() {
   const [workflows, setWorkflows] = useState([]);
@@ -86,6 +112,18 @@ function WorkflowEngine() {
         edges
       };
 
+      // Validate with Zod
+      try {
+        WorkflowSchema.parse(workflowData);
+      } catch (validationError) {
+        if (validationError instanceof z.ZodError) {
+          const errorMessages = validationError.errors.map(err => `${err.path.join('.')}: ${err.message}`).join('\n');
+          alert(`Validation failed:\n\n${errorMessages}`);
+          return;
+        }
+        throw validationError;
+      }
+
       const method = currentWorkflow.id ? 'PUT' : 'POST';
       const url = currentWorkflow.id
         ? `${API_BASE}/plugins/workflow-engine/workflows/${currentWorkflow.id}`
@@ -97,13 +135,17 @@ function WorkflowEngine() {
         body: JSON.stringify(workflowData)
       });
 
+      if (!res.ok) {
+        throw new Error(`HTTP error! status: ${res.status}`);
+      }
+
       const savedWorkflow = await res.json();
       setCurrentWorkflow(savedWorkflow);
       fetchWorkflows();
-      alert('Workflow saved successfully!');
+      alert('✅ Workflow saved successfully!');
     } catch (error) {
       console.error('Failed to save workflow:', error);
-      alert('Failed to save workflow');
+      alert(`❌ Failed to save workflow: ${error.message}`);
     }
   };
 
@@ -554,6 +596,80 @@ function WorkflowDesigner({
   );
 }
 
+// CodeEditor Component with CodeMirror
+function CodeEditor({ value, onChange, language = 'javascript', placeholder = '' }) {
+  const editorRef = useRef(null);
+  const viewRef = useRef(null);
+
+  useEffect(() => {
+    if (!editorRef.current) return;
+
+    // Clean up existing view
+    if (viewRef.current) {
+      viewRef.current.destroy();
+    }
+
+    // Create new editor view
+    const view = new EditorView({
+      doc: value || '',
+      extensions: [
+        basicSetup,
+        javascript(),
+        oneDark,
+        EditorView.updateListener.of((update) => {
+          if (update.docChanged) {
+            onChange(update.state.doc.toString());
+          }
+        }),
+        EditorView.theme({
+          "&": {
+            fontSize: "13px",
+            borderRadius: "0.5rem",
+            overflow: "hidden"
+          },
+          ".cm-scroller": {
+            fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace"
+          }
+        })
+      ],
+      parent: editorRef.current,
+    });
+
+    viewRef.current = view;
+
+    return () => {
+      if (viewRef.current) {
+        viewRef.current.destroy();
+        viewRef.current = null;
+      }
+    };
+  }, []); // Only run once on mount
+
+  // Update content when value changes externally
+  useEffect(() => {
+    if (viewRef.current && value !== viewRef.current.state.doc.toString()) {
+      viewRef.current.dispatch({
+        changes: {
+          from: 0,
+          to: viewRef.current.state.doc.length,
+          insert: value || ''
+        }
+      });
+    }
+  }, [value]);
+
+  return (
+    <div className="border border-glass-border rounded-lg overflow-hidden">
+      <div ref={editorRef} />
+      {placeholder && !value && (
+        <div className="absolute inset-0 pointer-events-none p-3 text-text-muted text-sm opacity-50">
+          {placeholder}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // Node Palette Component
 function NodePalette({ availablePlugins, setDraggedPaletteNode }) {
   const triggerTypes = [
@@ -877,12 +993,12 @@ function NodeProperties({ node, onUpdate, onClose, availablePlugins }) {
             {/* Special handling for AI Agent */}
             {data.actionId === 'ask' && (
               <div>
-                <label className="block text-sm text-text-muted mb-1">Prompt Template</label>
+                <label className="block text-sm text-text-muted mb-1 font-semibold">🤖 AI Prompt Template</label>
                 <textarea
                   value={data.promptTemplate || ''}
                   onChange={(e) => setData({ ...data, promptTemplate: e.target.value })}
                   className="w-full bg-bg-card border border-glass-border rounded-lg px-3 py-2 text-sm font-mono"
-                  rows={6}
+                  rows={8}
                   placeholder="Enter your prompt. Use {{node_id.field}} to insert data from previous nodes.
 
 Example:
@@ -891,9 +1007,11 @@ Please analyze this WhatsApp message:
 
 And provide a summary."
                 />
-                <p className="text-xs text-text-muted mt-1">
-                  Use <code>{'{{node_id.field}}'}</code> to reference previous node outputs
-                </p>
+                <div className="bg-bg-card border border-glass-border rounded p-2 text-xs text-text-muted mt-2">
+                  <p className="font-semibold mb-1">💡 Tip:</p>
+                  <p>Use <code className="text-accent">{'{{node_id.field}}'}</code> to reference previous node outputs</p>
+                  <p className="mt-1">Example: <code className="text-accent">{'{{whatsapp_node.body}}'}</code> or <code className="text-accent">{'{{jira_node.issues}}'}</code></p>
+                </div>
               </div>
             )}
 
@@ -981,33 +1099,24 @@ And provide a summary."
         {node.type === 'transform' && (
           <>
             <div>
-              <label className="block text-sm text-text-muted mb-1">Code (JavaScript)</label>
-              <textarea
-                value={data.code || ''}
-                onChange={(e) => setData({ ...data, code: e.target.value })}
-                className="w-full bg-bg-card border border-glass-border rounded-lg px-3 py-2 text-sm font-mono"
-                rows={12}
-                placeholder={`// Available variables:
-// - input: previous node output
-// - context: all node outputs
-
-// Example 1: Extract data
-const phoneNumber = input.from_number;
-return { phone: phoneNumber };
-
-// Example 2: Transform data
-const messages = input.messages.map(m => m.body);
-return { allMessages: messages.join('\\n') };
-
-// Example 3: Conditional logic
-if (input.count > 5) {
-  return { alert: 'High count!' };
-}
-return { alert: 'Normal' };`}
-              />
-              <p className="text-xs text-text-muted mt-1">
-                Write JavaScript code. Must return an object or value.
-              </p>
+              <label className="block text-sm text-text-muted mb-1 font-semibold">💻 Code (JavaScript)</label>
+              <div className="mb-2">
+                <CodeEditor
+                  value={data.code || ''}
+                  onChange={(newCode) => setData({ ...data, code: newCode })}
+                  language="javascript"
+                />
+              </div>
+              <div className="bg-bg-card border border-glass-border rounded p-2 text-xs text-text-muted space-y-1">
+                <p className="font-semibold">Available variables:</p>
+                <p>• <code className="text-primary">input</code> - Previous node output</p>
+                <p>• <code className="text-primary">context</code> - All node outputs</p>
+                <p className="mt-2 font-semibold">Example:</p>
+                <code className="block bg-bg-dark p-2 rounded mt-1">
+                  const phone = input.from_number;<br/>
+                  return {'{ phone }'};
+                </code>
+              </div>
             </div>
           </>
         )}
@@ -1058,9 +1167,10 @@ function ExecutionsPanel({ executions, onClose }) {
                 <span className={`text-sm font-medium ${getStatusColor(execution.status)}`}>
                   {execution.status.toUpperCase()}
                 </span>
-                <span className="text-xs text-text-muted">
-                  {new Date(execution.start_time).toLocaleString()}
-                </span>
+                <div className="text-xs text-text-muted text-right">
+                  <div>{formatDistanceToNow(new Date(execution.start_time), { addSuffix: true })}</div>
+                  <div className="text-[10px] opacity-70">{format(new Date(execution.start_time), 'MMM d, h:mm a')}</div>
+                </div>
               </div>
 
               {selectedExecution?.id === execution.id && (
