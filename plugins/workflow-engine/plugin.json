@@ -1,0 +1,52 @@
+{
+  "name": "workflow-engine",
+  "displayName": "Workflow Engine",
+  "description": "Design and automate workflows across plugins with visual workflow designer and cron scheduling",
+  "version": "1.0.0",
+  "tab": {
+    "label": "Workflows",
+    "icon": "⚙️",
+    "order": 50,
+    "enabled": true
+  },
+  "frontendComponent": "WorkflowEngine",
+  "widgets": [
+    {
+      "id": "workflow-status",
+      "displayName": "Workflow Status",
+      "description": "Quick overview of active workflows",
+      "icon": "⚙️",
+      "component": "widgets/WorkflowStatusWidget",
+      "preview": "Shows active and scheduled workflows",
+      "snapSizes": {
+        "default": "4x3",
+        "supported": ["4x2", "4x3", "6x3"],
+        "min": "4x2",
+        "max": "6x4"
+      },
+      "defaultSize": {
+        "w": 4,
+        "h": 3,
+        "minW": 4,
+        "minH": 2
+      },
+      "category": "automation"
+    }
+  ],
+  "features": [
+    "Visual workflow designer with drag-and-drop interface",
+    "Cron-based workflow scheduling",
+    "Plugin orchestration (chain actions across plugins)",
+    "Execution history and logging",
+    "Conditional logic and data transformation",
+    "Real-time workflow execution monitoring"
+  ],
+  "dependencies": {
+    "backend": [
+      "APScheduler>=3.10.4",
+      "httpx>=0.27.0",
+      "sqlalchemy>=2.0.0"
+    ]
+  },
+  "category": "automation"
+}
