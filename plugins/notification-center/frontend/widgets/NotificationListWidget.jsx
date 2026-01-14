@@ -31,12 +31,8 @@ const NotificationListWidget = () => {
   };
 
   return (
-    <div className="h-full flex flex-col p-4 overflow-hidden">
-      <h3 className="text-lg font-bold mb-3 text-text-main flex items-center gap-2">
-        <span>🔔</span>
-        <span>Notifications</span>
-      </h3>
-      <div className="flex-1 overflow-y-auto space-y-2">
+    <div className="h-full flex flex-col overflow-hidden">
+      <div className="flex-1 overflow-y-auto space-y-2 p-4">
         {notifications.length === 0 ? (
           <div className="text-text-muted text-sm text-center py-4">
             No notifications

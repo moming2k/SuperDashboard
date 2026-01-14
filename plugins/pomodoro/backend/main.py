@@ -114,6 +114,8 @@ async def get_state(db: Session = Depends(get_db)):
         raise HTTPException(status_code=503, detail="Database not available")
 
     try:
+        from datetime import datetime, timezone
+        
         # Get or create default state
         state = db.query(PomodoroStateModel).filter_by(id="default").first()
 
@@ -130,6 +132,44 @@ async def get_state(db: Session = Depends(get_db)):
             db.commit()
             db.refresh(state)
 
+        # Calculate elapsed time if timer is running
+        if state.is_running and state.last_updated:
+            now = datetime.now(timezone.utc)
+            last_updated = state.last_updated
+            
+            # Make last_updated timezone-aware if it isn't
+            if last_updated.tzinfo is None:
+                last_updated = last_updated.replace(tzinfo=timezone.utc)
+            
+            elapsed_seconds = int((now - last_updated).total_seconds())
+            
+            # Calculate new time_left
+            new_time_left = max(0, state.time_left - elapsed_seconds)
+            
+            # If timer reached zero, handle mode transition
+            if new_time_left == 0 and state.time_left > 0:
+                if state.mode == "work":
+                    # Transition to break
+                    state.mode = "break"
+                    state.time_left = 300  # 5 minutes
+                    state.is_running = 0  # Auto-pause on transition
+                    state.completed_pomodoros += 1
+                elif state.mode == "break":
+                    # Transition to idle
+                    state.mode = "idle"
+                    state.time_left = 1500  # 25 minutes
+                    state.is_running = 0
+                
+                state.last_updated = now
+                db.commit()
+                db.refresh(state)
+            else:
+                # DON'T update database - just return calculated value
+                # This allows continuous countdown without resetting last_updated
+                response_dict = state.to_dict()
+                response_dict['timeLeft'] = new_time_left
+                return response_dict
+
         return state.to_dict()
 
     except Exception as e:
@@ -144,6 +184,8 @@ async def save_state(state_data: PomodoroStateRequest, db: Session = Depends(get
         raise HTTPException(status_code=503, detail="Database not available")
 
     try:
+        from datetime import datetime, timezone
+        
         # Get or create state
         state = db.query(PomodoroStateModel).filter_by(id="default").first()
 
@@ -156,6 +198,7 @@ async def save_state(state_data: PomodoroStateRequest, db: Session = Depends(get
         state.mode = state_data.mode
         state.is_running = 1 if state_data.isRunning else 0
         state.completed_pomodoros = state_data.completedPomodoros
+        state.last_updated = datetime.now(timezone.utc)  # Update timestamp
 
         db.commit()
         db.refresh(state)
@@ -174,6 +217,8 @@ async def reset_timer(db: Session = Depends(get_db)):
         raise HTTPException(status_code=503, detail="Database not available")
 
     try:
+        from datetime import datetime, timezone
+        
         state = db.query(PomodoroStateModel).filter_by(id="default").first()
         if not state:
             state = PomodoroStateModel(id="default")
@@ -183,6 +228,8 @@ async def reset_timer(db: Session = Depends(get_db)):
         state.mode = "work"
         state.is_running = 0  # Stop the timer when reset
         state.completed_pomodoros = 0
+        state.last_updated = datetime.now(timezone.utc)
+        
         db.commit()
         db.refresh(state)
         return state.to_dict()
