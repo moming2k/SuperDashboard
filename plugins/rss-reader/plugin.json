@@ -12,5 +12,70 @@
   "frontendComponent": "RSSReader",
   "config": {
     "instructions": "🛠️ Configuration Instructions\n\n1. The RSS Reader requires OpenAI API key for AI-powered Q&A features\n2. Add to your backend/.env file:\n   - OPENAI_API_KEY=sk-your_key_here\n\n3. Features:\n   - Add RSS feeds via the + Add Feed button\n   - Articles are fetched automatically when you add a feed\n   - Daily scheduler fetches new articles at 6 AM automatically\n   - Click any article to view it with AI-generated Q&A\n   - Ask follow-up questions about articles using AI\n\n4. Supported RSS feed formats:\n   - RSS 2.0\n   - Atom 1.0\n   - Most standard blog/news feeds\n\n5. Example RSS feeds to try:\n   - TechCrunch: https://techcrunch.com/feed/\n   - Hacker News: https://hnrss.org/frontpage\n   - NY Times Technology: https://rss.nytimes.com/services/xml/rss/nyt/Technology.xml\n\n6. The scheduler runs automatically and fetches all feeds daily\n7. Restart the backend server after updating .env"
-  }
+  },
+  "widgets": [
+    {
+      "id": "rss-compact",
+      "displayName": "RSS Stats",
+      "description": "Quick view of RSS feed statistics",
+      "icon": "📰",
+      "component": "widgets/RSSCompactWidget",
+      "preview": "Shows article and feed counts",
+      "snapSizes": {
+        "default": "3x2",
+        "supported": ["3x2", "4x2"],
+        "min": "3x2",
+        "max": "4x3"
+      },
+      "defaultSize": {
+        "w": 3,
+        "h": 2,
+        "minW": 3,
+        "minH": 2
+      },
+      "category": "productivity"
+    },
+    {
+      "id": "rss-articles",
+      "displayName": "Recent Articles",
+      "description": "List of recent RSS articles",
+      "icon": "📰",
+      "component": "widgets/RSSArticlesWidget",
+      "preview": "Shows 5 most recent articles from all feeds",
+      "snapSizes": {
+        "default": "4x3",
+        "supported": ["4x3", "4x4", "6x4"],
+        "min": "4x3",
+        "max": "6x5"
+      },
+      "defaultSize": {
+        "w": 4,
+        "h": 3,
+        "minW": 4,
+        "minH": 3
+      },
+      "category": "productivity"
+    },
+    {
+      "id": "rss-detailed",
+      "displayName": "RSS Feed Reader",
+      "description": "Full RSS reader with article list",
+      "icon": "📰",
+      "component": "widgets/RSSDetailedWidget",
+      "preview": "Complete article list with feed statistics",
+      "snapSizes": {
+        "default": "6x4",
+        "supported": ["4x4", "6x4", "8x4", "8x5"],
+        "min": "4x4",
+        "max": "12x6"
+      },
+      "defaultSize": {
+        "w": 6,
+        "h": 4,
+        "minW": 4,
+        "minH": 4
+      },
+      "category": "productivity"
+    }
+  ]
 }

@@ -12,5 +12,70 @@
   },
   "frontendComponent": "PomodoroTimer",
   "icon": "🍅",
-  "category": "productivity"
+  "category": "productivity",
+  "widgets": [
+    {
+      "id": "pomodoro-compact",
+      "displayName": "Pomodoro Timer (Compact)",
+      "description": "Compact view of Pomodoro timer status",
+      "icon": "🍅",
+      "component": "widgets/PomodoroCompactWidget",
+      "preview": "Shows current timer and mode status",
+      "snapSizes": {
+        "default": "3x2",
+        "supported": ["3x2", "4x2"],
+        "min": "3x2",
+        "max": "4x3"
+      },
+      "defaultSize": {
+        "w": 3,
+        "h": 2,
+        "minW": 3,
+        "minH": 2
+      },
+      "category": "productivity"
+    },
+    {
+      "id": "pomodoro-standard",
+      "displayName": "Pomodoro Timer (Standard)",
+      "description": "Standard Pomodoro timer with controls",
+      "icon": "🍅",
+      "component": "widgets/PomodoroStandardWidget",
+      "preview": "Full timer with start, pause, and reset controls",
+      "snapSizes": {
+        "default": "4x3",
+        "supported": ["4x3", "4x4", "6x3"],
+        "min": "4x3",
+        "max": "6x4"
+      },
+      "defaultSize": {
+        "w": 4,
+        "h": 3,
+        "minW": 4,
+        "minH": 3
+      },
+      "category": "productivity"
+    },
+    {
+      "id": "pomodoro-detailed",
+      "displayName": "Pomodoro Timer (Detailed)",
+      "description": "Detailed Pomodoro timer with statistics",
+      "icon": "🍅",
+      "component": "widgets/PomodoroDetailedWidget",
+      "preview": "Timer with controls and session statistics",
+      "snapSizes": {
+        "default": "6x4",
+        "supported": ["6x4", "6x5", "8x4"],
+        "min": "6x4",
+        "max": "8x6"
+      },
+      "defaultSize": {
+        "w": 6,
+        "h": 4,
+        "minW": 6,
+        "minH": 4
+      },
+      "category": "productivity"
+    }
+  ]
 }

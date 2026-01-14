@@ -38,8 +38,6 @@ function QuickStatsWidget() {
 
   return (
     <div className="flex flex-col h-full">
-      <h3 className="text-lg font-bold mb-4">Quick Stats</h3>
-
       <div className="flex-1 space-y-4">
         {/* Tasks Section */}
         <div>

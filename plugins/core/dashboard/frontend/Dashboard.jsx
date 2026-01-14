@@ -96,8 +96,12 @@ const WidgetContainer = ({ widget, onRemove }) => {
         );
       } else {
         // For other plugin widgets, load from their plugin directory
+        // This file is loaded via symlink at frontend/src/plugins/dashboard/Dashboard.jsx
+        // So we can use relative path to sibling plugins
+        const modulePath = `../${widget.pluginName}/${widget.component}.jsx`;
+
         widgetComponentCache[cacheKey] = lazy(() =>
-          import(`../${widget.pluginName}/${widget.component}.jsx`)
+          import(/* @vite-ignore */ modulePath)
             .catch(err => {
               console.error(`Failed to load widget: ${widget.pluginName}/${widget.component}`, err);
               return {

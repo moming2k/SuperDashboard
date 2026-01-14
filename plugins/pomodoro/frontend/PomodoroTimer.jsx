@@ -39,26 +39,6 @@ function PomodoroTimer() {
     });
   }, []);
 
-  // Auto-save state when timer is running (only after initial load)
-  useEffect(() => {
-    if (isRunning && stateLoaded) {
-      const saveInterval = setInterval(() => {
-        saveTimerState();
-      }, 5000); // Save every 5 seconds
-
-      return () => clearInterval(saveInterval);
-    }
-  }, [isRunning, stateLoaded]);
-
-  // Save state when component unmounts (only if state was loaded)
-  useEffect(() => {
-    return () => {
-      if (stateLoaded) {
-        saveTimerState();
-      }
-    };
-  }, [stateLoaded]);
-
   // Helper function to send notification to backend
   const sendNotificationToBackend = async (title, description, priority = 'medium') => {
     try {
@@ -128,31 +108,11 @@ function PomodoroTimer() {
       const data = await response.json();
 
       if (data && data.id) {
+        // Backend already calculates elapsed time, just use the values directly
         setTimeLeft(data.timeLeft || WORK_TIME);
         setMode(data.mode || 'work');
         setIsRunning(data.isRunning || false);
         setCompletedPomodoros(data.completedPomodoros || 0);
-
-        // If timer was running, calculate elapsed time and adjust
-        if (data.isRunning && data.lastUpdated) {
-          const lastUpdate = new Date(data.lastUpdated);
-          const now = new Date();
-          const elapsedSeconds = Math.floor((now - lastUpdate) / 1000);
-          const adjustedTime = Math.max(0, data.timeLeft - elapsedSeconds);
-          setTimeLeft(adjustedTime);
-
-          // If time ran out while away, handle completion
-          if (adjustedTime === 0) {
-            setIsRunning(false);
-            if (data.mode === 'work') {
-              setMode('break');
-              setTimeLeft(BREAK_TIME);
-            } else {
-              setMode('idle');
-              setTimeLeft(WORK_TIME);
-            }
-          }
-        }
       }
     } catch (error) {
       console.error('Failed to load timer state:', error);
@@ -244,70 +204,76 @@ function PomodoroTimer() {
     }
   };
 
-  // Timer effect
+  // Poll backend for timer state (like widgets do)
   useEffect(() => {
-    if (isRunning && timeLeft > 0) {
-      timerRef.current = setInterval(() => {
-        setTimeLeft((prev) => prev - 1);
-      }, 1000);
-    } else if (timeLeft === 0 && isRunning) {
-      // Timer reached 0 - immediately stop to prevent duplicate triggers
-      setIsRunning(false);
+    const pollInterval = setInterval(() => {
+      loadTimerState();
+    }, 500); // Poll every 500ms for smooth updates
 
+    return () => clearInterval(pollInterval);
+  }, []);
+
+  // Watch for mode transitions to trigger notifications
+  const prevModeRef = useRef(mode);
+  const prevTimeLeftRef = useRef(timeLeft);
+
+  useEffect(() => {
+    const prevMode = prevModeRef.current;
+    const prevTimeLeft = prevTimeLeftRef.current;
+
+    // Detect work session completion (work mode ended with time at 0)
+    if (prevMode === 'work' && mode === 'break' && prevTimeLeft > 0 && timeLeft <= 300) {
       playNotification();
-      const endTime = new Date();
+      const title = '🍅 Work Session Complete!';
+      const description = 'Great job! Time for a 5-minute break.';
+      showDesktopNotification(title, description, '🍅');
+      sendNotificationToBackend(title, description, 'medium');
 
-      if (mode === 'work') {
-        // Transition to break
-        const title = '🍅 Work Session Complete!';
-        const description = 'Great job! Time for a 5-minute break.';
-
-        showDesktopNotification(title, description, '🍅');
-        sendNotificationToBackend(title, description, 'medium');
-
-        // Create session record
-        if (sessionStartTime) {
-          createSessionRecord('work', sessionStartTime, endTime, true);
-        }
-
-        setMode('break');
-        setTimeLeft(BREAK_TIME);
-        setCompletedPomodoros((prev) => prev + 1);
+      // Create session record
+      if (sessionStartTime) {
+        const endTime = new Date();
+        createSessionRecord('work', sessionStartTime, endTime, true);
+        setCompletedPomodoros((prev) => prev + 1); // Increment here as backend doesn't do it
         setSessionStartTime(new Date()); // Start break session
-      } else if (mode === 'break') {
-        // Break finished, stop and wait
-        const title = '☕ Break Time Over!';
-        const description = 'Ready to start another Pomodoro?';
+      }
+    }
 
-        showDesktopNotification(title, description, '🍅');
-        sendNotificationToBackend(title, description, 'low');
+    // Detect break completion
+    if (prevMode === 'break' && mode === 'idle') {
+      playNotification();
+      const title = '☕ Break Time Over!';
+      const description = 'Ready to start another Pomodoro?';
+      showDesktopNotification(title, description, '🍅');
+      sendNotificationToBackend(title, description, 'low');
 
-        // Create break session record
-        if (sessionStartTime) {
-          createSessionRecord('break', sessionStartTime, endTime, true);
-        }
-
-        setMode('idle');
-        setTimeLeft(WORK_TIME);
+      // Create break session record
+      if (sessionStartTime) {
+        const endTime = new Date();
+        createSessionRecord('break', sessionStartTime, endTime, true);
         setSessionStartTime(null);
       }
     }
 
-    return () => {
-      if (timerRef.current) {
-        clearInterval(timerRef.current);
-      }
-    };
-  }, [isRunning, timeLeft, mode, notificationPermission]);
+    prevModeRef.current = mode;
+    prevTimeLeftRef.current = timeLeft;
+  }, [mode, timeLeft, sessionStartTime]);
 
   // Control handlers
-  const handleStart = () => {
+  const handleStart = async () => {
     if (mode === 'idle') {
       setMode('work');
       setTimeLeft(WORK_TIME);
       setSessionStartTime(new Date()); // Track session start time
     }
     setIsRunning(true);
+    // Manually update ref to ensure save gets correct value
+    stateRef.current = {
+      ...stateRef.current,
+      isRunning: true,
+      mode: mode === 'idle' ? 'work' : mode,
+      timeLeft: mode === 'idle' ? WORK_TIME : stateRef.current.timeLeft
+    };
+    await saveTimerState(); // Save to backend immediately on start
   };
 
   const handleResume = async () => {
@@ -350,12 +316,19 @@ function PomodoroTimer() {
     }
   };
 
-  const handleSkipBreak = () => {
+  const handleSkipBreak = async () => {
     setMode('work');
     setTimeLeft(WORK_TIME);
     setIsRunning(false);
     setSessionStartTime(null);
-    saveTimerState(); // Save immediately on skip
+    // Manually update ref to ensure save gets correct value
+    stateRef.current = {
+      ...stateRef.current,
+      mode: 'work',
+      timeLeft: WORK_TIME,
+      isRunning: false
+    };
+    await saveTimerState(); // Save immediately on skip
   };
 
   const handleRequestNotification = () => {
