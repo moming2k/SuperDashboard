@@ -6,13 +6,15 @@ import WorkflowCanvas from './components/WorkflowCanvas';
 import NodePalette from './components/NodePalette';
 import { NodeProperties, ExecutionsPanel } from './components/SharedComponents';
 import WorkflowErrorBoundary from './components/WorkflowErrorBoundary';
+import ConfirmDialog from './components/ConfirmDialog';
+import TemplateSelector from './components/TemplateSelector';
 import { createTriggerNode, createActionNode, createLogicNode, NodeTypes } from './utils/nodeFactory';
 import { migrateWorkflow, convertToLegacyFormat } from './utils/workflowMigration';
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
 
 // Workflow List Component
-function WorkflowList({ workflows, onLoad, onExecute, onDelete }) {
+function WorkflowList({ workflows, onLoad, onExecute, onDelete, onShowTemplates }) {
     return (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {workflows.map(workflow => (
@@ -63,8 +65,15 @@ function WorkflowList({ workflows, onLoad, onExecute, onDelete }) {
 
             {workflows.length === 0 && (
                 <div className="col-span-full text-center py-12 text-text-muted">
-                    <p className="text-lg">No workflows yet</p>
-                    <p className="text-sm mt-2">Create your first workflow to get started</p>
+                    <div className="text-6xl mb-4">⚙️</div>
+                    <p className="text-lg mb-2">No workflows yet</p>
+                    <p className="text-sm mb-6">Create your first workflow or start from a template</p>
+                    <button
+                        onClick={onShowTemplates}
+                        className="px-6 py-3 bg-gradient-to-r from-primary to-accent text-white rounded-lg hover:shadow-lg hover:shadow-primary/50 transition-all font-semibold"
+                    >
+                        📚 Browse Templates
+                    </button>
                 </div>
             )}
         </div>
@@ -88,7 +97,62 @@ function WorkflowDesigner({
     const [edges, setEdges] = useState(workflow.edges || []);
     const [selectedNode, setSelectedNode] = useState(null);
     const [showExecutions, setShowExecutions] = useState(false);
+    const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+    const [nodeToDelete, setNodeToDelete] = useState(null);
     const reactFlowWrapper = useRef(null);
+
+    // Handle node deletion
+    const handleDeleteNode = useCallback((nodeId) => {
+        setNodeToDelete(nodeId);
+        setShowDeleteConfirm(true);
+    }, []);
+
+    const confirmDelete = useCallback(() => {
+        if (nodeToDelete) {
+            setNodes((nds) => nds.filter((node) => node.id !== nodeToDelete));
+            setEdges((eds) => eds.filter((edge) =>
+                edge.source !== nodeToDelete && edge.target !== nodeToDelete
+            ));
+            if (selectedNode?.id === nodeToDelete) {
+                setSelectedNode(null);
+            }
+        }
+        setShowDeleteConfirm(false);
+        setNodeToDelete(null);
+    }, [nodeToDelete, selectedNode]);
+
+    // Handle node duplication
+    const handleDuplicateNode = useCallback((nodeId) => {
+        const nodeToDuplicate = nodes.find((n) => n.id === nodeId);
+        if (nodeToDuplicate) {
+            const newNode = {
+                ...nodeToDuplicate,
+                id: `node_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+                position: {
+                    x: nodeToDuplicate.position.x + 50,
+                    y: nodeToDuplicate.position.y + 50,
+                },
+                data: {
+                    ...nodeToDuplicate.data,
+                    id: `node_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+                },
+            };
+            setNodes((nds) => [...nds, newNode]);
+        }
+    }, [nodes]);
+
+    // Add onDelete to all nodes
+    useEffect(() => {
+        setNodes((nds) =>
+            nds.map((node) => ({
+                ...node,
+                data: {
+                    ...node.data,
+                    onDelete: handleDeleteNode,
+                },
+            }))
+        );
+    }, [handleDeleteNode]);
 
     // Handle drop from palette
     const onDrop = useCallback((event) => {
@@ -112,9 +176,10 @@ function WorkflowDesigner({
         }
 
         if (newNode) {
+            newNode.data.onDelete = handleDeleteNode;
             setNodes((nds) => [...nds, newNode]);
         }
-    }, []);
+    }, [handleDeleteNode]);
 
     const onDragOver = useCallback((event) => {
         event.preventDefault();
@@ -265,9 +330,22 @@ function WorkflowDesigner({
                     node={selectedNode}
                     onUpdate={(updates) => handleNodeUpdate(selectedNode.id, updates)}
                     onClose={() => setSelectedNode(null)}
+                    onDelete={() => handleDeleteNode(selectedNode.id)}
+                    onDuplicate={() => handleDuplicateNode(selectedNode.id)}
                     availablePlugins={availablePlugins}
                 />
             )}
+
+            {/* Delete Confirmation Dialog */}
+            <ConfirmDialog
+                isOpen={showDeleteConfirm}
+                title="Delete Node?"
+                message="Are you sure you want to delete this node? All connections to this node will also be removed. This action cannot be undone."
+                onConfirm={confirmDelete}
+                onCancel={() => setShowDeleteConfirm(false)}
+                confirmText="Delete"
+                confirmStyle="danger"
+            />
         </div>
     );
 }
@@ -281,6 +359,7 @@ function WorkflowEngine() {
     const [view, setView] = useState('list');
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
+    const [showTemplates, setShowTemplates] = useState(false);
 
     useEffect(() => {
         const loadData = async () => {
@@ -356,6 +435,17 @@ function WorkflowEngine() {
             edges: [],
             reactFlowVersion: '1.0',
         });
+        setView('designer');
+    };
+
+    const loadFromTemplate = (template) => {
+        // Load template workflow
+        const templateWorkflow = {
+            ...template.workflow,
+            reactFlowVersion: '1.0',
+        };
+        setCurrentWorkflow(templateWorkflow);
+        setShowTemplates(false);
         setView('designer');
     };
 
@@ -481,6 +571,12 @@ function WorkflowEngine() {
                             📋 Workflows
                         </button>
                         <button
+                            onClick={() => setShowTemplates(true)}
+                            className="px-4 py-2 bg-glass border border-glass-border text-text-main rounded-lg hover:bg-glass-hover transition-all"
+                        >
+                            📚 Templates
+                        </button>
+                        <button
                             onClick={createNewWorkflow}
                             className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary-hover transition-all"
                             disabled={saving}
@@ -497,6 +593,7 @@ function WorkflowEngine() {
                         onLoad={loadWorkflow}
                         onExecute={executeWorkflow}
                         onDelete={deleteWorkflow}
+                        onShowTemplates={() => setShowTemplates(true)}
                     />
                 )}
 
@@ -511,6 +608,13 @@ function WorkflowEngine() {
                         saving={saving}
                     />
                 )}
+
+                {/* Template Selector Modal */}
+                <TemplateSelector
+                    isOpen={showTemplates}
+                    onClose={() => setShowTemplates(false)}
+                    onSelectTemplate={loadFromTemplate}
+                />
             </div>
         </ReactFlowProvider>
     );

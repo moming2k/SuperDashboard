@@ -1,8 +1,15 @@
 import React, { memo } from 'react';
 import { Handle, Position } from 'reactflow';
 
-const TriggerNode = ({ data, selected }) => {
-    const { label, triggerType, icon, color } = data;
+const TriggerNode = ({ data, selected, id }) => {
+    const { label, triggerType, icon, color, onDelete } = data;
+
+    const handleDelete = (e) => {
+        e.stopPropagation();
+        if (onDelete) {
+            onDelete(id);
+        }
+    };
 
     return (
         <div
@@ -13,6 +20,17 @@ const TriggerNode = ({ data, selected }) => {
         hover:border-primary/50
       `}
         >
+            {/* Delete Button - Only show when selected */}
+            {selected && (
+                <button
+                    onClick={handleDelete}
+                    className="absolute -top-2 -right-2 w-6 h-6 bg-red-500 text-white rounded-full hover:bg-red-600 transition-all shadow-lg flex items-center justify-center z-10"
+                    title="Delete node"
+                >
+                    <span className="text-xs">✕</span>
+                </button>
+            )}
+
             {/* Header */}
             <div className="flex items-center gap-3 mb-2">
                 <div className={`w-10 h-10 ${color} rounded-lg flex items-center justify-center text-lg`}>

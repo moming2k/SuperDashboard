@@ -1,8 +1,15 @@
 import React, { memo } from 'react';
 import { Handle, Position } from 'reactflow';
 
-const ActionNode = ({ data, selected }) => {
-    const { label, plugin, icon, color } = data;
+const ActionNode = ({ data, selected, id }) => {
+    const { label, plugin, action, icon, color } = data;
+
+    const handleDelete = (e) => {
+        e.stopPropagation();
+        if (data.onDelete) {
+            data.onDelete(id);
+        }
+    };
 
     return (
         <div
@@ -13,6 +20,17 @@ const ActionNode = ({ data, selected }) => {
         hover:border-primary/50
       `}
         >
+            {/* Delete Button - Only show when selected */}
+            {selected && (
+                <button
+                    onClick={handleDelete}
+                    className="absolute -top-2 -right-2 w-6 h-6 bg-red-500 text-white rounded-full hover:bg-red-600 transition-all shadow-lg flex items-center justify-center z-10"
+                    title="Delete node"
+                >
+                    <span className="text-xs">✕</span>
+                </button>
+            )}
+
             {/* Input Handle */}
             <Handle
                 type="target"

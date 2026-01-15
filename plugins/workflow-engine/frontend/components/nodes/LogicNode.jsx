@@ -1,18 +1,53 @@
 import React, { memo } from 'react';
 import { Handle, Position } from 'reactflow';
+import { LogicNodeSubTypes } from '../../utils/nodeFactory';
 
-const LogicNode = ({ data, selected }) => {
+const LogicNode = ({ data, selected, id }) => {
     const { label, logicType, icon, color } = data;
+
+    const handleDelete = (e) => {
+        e.stopPropagation();
+        if (data.onDelete) {
+            data.onDelete(id);
+        }
+    };
+
+    // Get preview text based on logic type
+    const getPreviewText = () => {
+        if (logicType === LogicNodeSubTypes.DELAY && data.duration) {
+            return `Wait ${data.duration}s`;
+        }
+        if (logicType === LogicNodeSubTypes.CONDITION && data.condition) {
+            return data.condition;
+        }
+        if (logicType === LogicNodeSubTypes.TRANSFORM && data.code) {
+            return 'Custom code';
+        }
+        return null;
+    };
+
+    const previewText = getPreviewText();
 
     return (
         <div
             className={`
-        relative bg-glass backdrop-blur-xl border-2 rounded-xl p-4 min-w-[180px]
+        relative bg-glass backdrop-blur-xl border-2 rounded-xl p-4 min-w-[200px]
         transition-all duration-200
         ${selected ? 'border-primary shadow-lg shadow-primary/50' : 'border-glass-border'}
         hover:border-primary/50
       `}
         >
+            {/* Delete Button - Only show when selected */}
+            {selected && (
+                <button
+                    onClick={handleDelete}
+                    className="absolute -top-2 -right-2 w-6 h-6 bg-red-500 text-white rounded-full hover:bg-red-600 transition-all shadow-lg flex items-center justify-center z-10"
+                    title="Delete node"
+                >
+                    <span className="text-xs">✕</span>
+                </button>
+            )}
+
             {/* Input Handle */}
             <Handle
                 type="target"

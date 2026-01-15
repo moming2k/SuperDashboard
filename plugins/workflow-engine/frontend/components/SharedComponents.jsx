@@ -81,7 +81,7 @@ function CodeEditor({ value, onChange, language = 'javascript', placeholder = ''
 }
 
 // Node Properties Panel
-function NodeProperties({ node, onUpdate, onClose, availablePlugins }) {
+function NodeProperties({ node, onUpdate, onClose, onDelete, onDuplicate, availablePlugins }) {
     const [data, setData] = useState(node.data || {});
 
     useEffect(() => {
@@ -237,14 +237,32 @@ function NodeProperties({ node, onUpdate, onClose, availablePlugins }) {
                 )}
             </div>
 
-            {/* Footer */}
-            <div className="p-4 border-t border-glass-border bg-bg-card">
+            {/* Footer with action buttons */}
+            <div className="p-4 border-t border-glass-border bg-bg-card flex gap-2">
                 <button
                     onClick={handleUpdate}
-                    className="w-full px-4 py-3 bg-gradient-to-r from-primary to-accent text-white rounded-lg hover:shadow-lg hover:shadow-primary/50 transition-all font-semibold"
+                    className="flex-1 px-4 py-3 bg-gradient-to-r from-primary to-accent text-white rounded-lg hover:shadow-lg hover:shadow-primary/50 transition-all font-semibold"
                 >
-                    ✓ Update Node
+                    ✓ Update
                 </button>
+                {onDuplicate && (
+                    <button
+                        onClick={onDuplicate}
+                        className="px-4 py-3 bg-glass border border-glass-border text-text-main rounded-lg hover:bg-glass-hover transition-all"
+                        title="Duplicate node"
+                    >
+                        📋
+                    </button>
+                )}
+                {onDelete && (
+                    <button
+                        onClick={onDelete}
+                        className="px-4 py-3 bg-red-500/20 text-red-400 border border-red-500/30 rounded-lg hover:bg-red-500/30 transition-all"
+                        title="Delete node"
+                    >
+                        🗑️
+                    </button>
+                )}
             </div>
         </div>
     );

@@ -54,6 +54,11 @@ const WorkflowCanvas = ({
                 nodeTypes={nodeTypes}
                 edgeTypes={edgeTypes}
                 fitView
+                fitViewOptions={{
+                    padding: 0.2,
+                    minZoom: 0.5,
+                    maxZoom: 1.5,
+                }}
                 nodesDraggable={!readOnly}
                 nodesConnectable={!readOnly}
                 elementsSelectable={!readOnly}
