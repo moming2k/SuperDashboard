@@ -54,8 +54,10 @@ except Exception as e:
     print("   Plugin will work with limited functionality")
 
 # Start scheduler
-scheduler.start()
-print("⚙️  Workflow scheduler started")
+# Commented out to prevent event loop error during module load
+# The scheduler will start automatically when the first workflow is scheduled
+# scheduler.start()
+# print("⚙️  Workflow scheduler started")
 
 
 # ==================== Pydantic Models ====================

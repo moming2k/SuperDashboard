@@ -1,0 +1,53 @@
+import React, { memo } from 'react';
+import { Handle, Position } from 'reactflow';
+
+const TriggerNode = ({ data, selected }) => {
+    const { label, triggerType, icon, color } = data;
+
+    return (
+        <div
+            className={`
+        relative bg-glass backdrop-blur-xl border-2 rounded-xl p-4 min-w-[200px]
+        transition-all duration-200
+        ${selected ? 'border-primary shadow-lg shadow-primary/50' : 'border-glass-border'}
+        hover:border-primary/50
+      `}
+        >
+            {/* Header */}
+            <div className="flex items-center gap-3 mb-2">
+                <div className={`w-10 h-10 ${color} rounded-lg flex items-center justify-center text-lg`}>
+                    {icon}
+                </div>
+                <div className="flex-1">
+                    <div className="text-xs text-text-muted uppercase font-semibold">Trigger</div>
+                    <div className="text-sm font-bold text-text-main">{label}</div>
+                </div>
+            </div>
+
+            {/* Trigger Type Badge */}
+            <div className="bg-green-500/20 text-green-400 text-xs px-2 py-1 rounded inline-block">
+                {triggerType}
+            </div>
+
+            {/* Status Indicators */}
+            {data.status && (
+                <div className={`
+          absolute top-2 right-2 w-3 h-3 rounded-full
+          ${data.status === 'running' ? 'bg-blue-500 animate-pulse' : ''}
+          ${data.status === 'success' ? 'bg-green-500' : ''}
+          ${data.status === 'error' ? 'bg-red-500' : ''}
+        `} />
+            )}
+
+            {/* Output Handle */}
+            <Handle
+                type="source"
+                position={Position.Right}
+                className="!w-3 !h-3 !bg-primary !border-2 !border-white"
+                style={{ right: -6 }}
+            />
+        </div>
+    );
+};
+
+export default memo(TriggerNode);

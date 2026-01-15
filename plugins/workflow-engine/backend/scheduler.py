@@ -16,8 +16,12 @@ class WorkflowScheduler:
     def start(self):
         """Start the scheduler"""
         if not self.scheduler.running:
-            self.scheduler.start()
-            logger.info("Workflow scheduler started")
+            try:
+                self.scheduler.start()
+                logger.info("Workflow scheduler started")
+            except RuntimeError as e:
+                # Event loop not running yet, scheduler will start when first job is added
+                logger.warning(f"Scheduler start deferred: {e}")
 
     def stop(self):
         """Stop the scheduler"""
