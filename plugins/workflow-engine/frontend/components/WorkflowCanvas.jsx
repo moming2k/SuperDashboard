@@ -91,6 +91,8 @@ const WorkflowCanvas = ({
                         return '#6b7280';
                     }}
                     maskColor="rgba(0, 0, 0, 0.6)"
+                    pannable={true}
+                    zoomable={true}
                 />
             </ReactFlow>
         </div>
