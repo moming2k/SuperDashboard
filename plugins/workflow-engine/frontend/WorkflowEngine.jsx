@@ -1,6 +1,6 @@
 import 'reactflow/dist/style.css';
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { ReactFlowProvider, applyNodeChanges, applyEdgeChanges } from 'reactflow';
+import { ReactFlowProvider, applyNodeChanges, applyEdgeChanges, useReactFlow } from 'reactflow';
 
 import WorkflowCanvas from './components/WorkflowCanvas';
 import NodePalette from './components/NodePalette';
@@ -80,9 +80,6 @@ function WorkflowList({ workflows, onLoad, onExecute, onDelete, onShowTemplates 
     );
 }
 
-// Node drop offset constants
-const NODE_DROP_OFFSET = { x: 100, y: 40 };
-
 // Workflow Designer Component
 function WorkflowDesigner({
     workflow,
@@ -100,6 +97,7 @@ function WorkflowDesigner({
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
     const [nodeToDelete, setNodeToDelete] = useState(null);
     const reactFlowWrapper = useRef(null);
+    const { screenToFlowPosition } = useReactFlow();
 
     // Handle node deletion
     const handleDeleteNode = useCallback((nodeId) => {
@@ -158,13 +156,13 @@ function WorkflowDesigner({
     const onDrop = useCallback((event) => {
         event.preventDefault();
 
-        const reactFlowBounds = reactFlowWrapper.current.getBoundingClientRect();
         const data = JSON.parse(event.dataTransfer.getData('application/reactflow'));
 
-        const position = {
-            x: event.clientX - reactFlowBounds.left - NODE_DROP_OFFSET.x,
-            y: event.clientY - reactFlowBounds.top - NODE_DROP_OFFSET.y,
-        };
+        // Use React Flow's screenToFlowPosition to properly account for zoom and pan
+        const position = screenToFlowPosition({
+            x: event.clientX,
+            y: event.clientY,
+        });
 
         let newNode;
         if (data.nodeType === NodeTypes.TRIGGER) {
@@ -179,7 +177,7 @@ function WorkflowDesigner({
             newNode.data.onDelete = handleDeleteNode;
             setNodes((nds) => [...nds, newNode]);
         }
-    }, [handleDeleteNode]);
+    }, [handleDeleteNode, screenToFlowPosition]);
 
     const onDragOver = useCallback((event) => {
         event.preventDefault();
