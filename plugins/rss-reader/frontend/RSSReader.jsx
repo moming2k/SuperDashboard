@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 
 // Detect if running in devcontainer and use appropriate backend port
 const isDevContainer = import.meta.env.VITE_DEVCONTAINER === 'true';
@@ -24,7 +24,16 @@ export default function RSSReader() {
     const [hasMore, setHasMore] = useState(true);
     const [isLoadingMore, setIsLoadingMore] = useState(false);
     const [qaLanguage, setQaLanguage] = useState('Traditional Chinese');
-    const loadMoreRef = React.useRef(null);
+    const [filterMode, setFilterMode] = useState('unread'); // 'unread', 'read', 'all', 'starred'
+    const [toast, setToast] = useState(null); // For notifications
+    const loadMoreRef = useRef(null);
+    const articleListRef = useRef(null);
+
+    // Show toast notification
+    const showToast = (message, type = 'success') => {
+        setToast({ message, type });
+        setTimeout(() => setToast(null), 3000);
+    };
 
     // Load article from URL hash on mount
     useEffect(() => {
@@ -53,6 +62,44 @@ export default function RSSReader() {
         return () => window.removeEventListener('hashchange', handleHashChange);
     }, []);
 
+    // Keyboard navigation
+    useEffect(() => {
+        const handleKeyPress = (e) => {
+            // Ignore if user is typing in an input
+            if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+
+            if (selectedArticle) {
+                // In reading mode
+                if (e.key === 'Escape') {
+                    e.preventDefault();
+                    setSelectedArticle(null);
+                    window.location.hash = 'rss-reader';
+                } else if (e.key === 'j') {
+                    e.preventDefault();
+                    navigateToNextArticle();
+                } else if (e.key === 'k') {
+                    e.preventDefault();
+                    navigateToPrevArticle();
+                } else if (e.key === 's') {
+                    e.preventDefault();
+                    toggleStar(selectedArticle.id);
+                } else if (e.key === 'm') {
+                    e.preventDefault();
+                    toggleRead(selectedArticle.id);
+                }
+            } else {
+                // In list mode
+                if (e.key === 'j' || e.key === 'k') {
+                    e.preventDefault();
+                    // Could add list navigation here
+                }
+            }
+        };
+
+        window.addEventListener('keydown', handleKeyPress);
+        return () => window.removeEventListener('keydown', handleKeyPress);
+    }, [selectedArticle, articles]);
+
     useEffect(() => {
         fetchFeeds();
         fetchArticles(true); // Reset on mount
@@ -60,11 +107,11 @@ export default function RSSReader() {
 
         // Poll for new articles every 60 seconds
         const interval = setInterval(() => {
-            fetchArticles(true); // Reset when polling
+            fetchArticlesQuietly(); // Fetch without resetting to check for new articles
         }, 60000);
 
         return () => clearInterval(interval);
-    }, [selectedFeed]);
+    }, [selectedFeed, filterMode]);
 
     const fetchFeeds = async () => {
         try {
@@ -91,9 +138,14 @@ export default function RSSReader() {
         if (!reset) setIsLoadingMore(true);
 
         try {
-            const url = selectedFeed
-                ? `${API_BASE}/plugins/rss-reader/articles?feed_id=${selectedFeed}&limit=50&offset=${currentOffset}`
-                : `${API_BASE}/plugins/rss-reader/articles?limit=50&offset=${currentOffset}`;
+            let url = `${API_BASE}/plugins/rss-reader/articles?limit=50&offset=${currentOffset}`;
+            if (selectedFeed) {
+                url += `&feed_id=${selectedFeed}`;
+            }
+            if (filterMode && filterMode !== 'all') {
+                url += `&filter_read=${filterMode}`;
+            }
+
             const res = await fetch(url);
             if (!res.ok) {
                 console.error("Failed to fetch articles:", res.status);
@@ -119,6 +171,42 @@ export default function RSSReader() {
         }
     };
 
+    // Fetch articles quietly in the background to check for new articles
+    const fetchArticlesQuietly = async () => {
+        try {
+            let url = `${API_BASE}/plugins/rss-reader/articles?limit=50&offset=0`;
+            if (selectedFeed) {
+                url += `&feed_id=${selectedFeed}`;
+            }
+            if (filterMode && filterMode !== 'all') {
+                url += `&filter_read=${filterMode}`;
+            }
+
+            const res = await fetch(url);
+            if (!res.ok) return;
+
+            const data = await res.json();
+            const newArticles = data.articles || [];
+
+            // Check if there are new articles
+            if (newArticles.length > 0 && articles.length > 0) {
+                const latestNewArticleId = newArticles[0].id;
+                const latestCurrentArticleId = articles[0].id;
+
+                if (latestNewArticleId !== latestCurrentArticleId) {
+                    // New articles detected, refresh the list
+                    setArticles(newArticles);
+                    setOffset(newArticles.length);
+                    setHasMore(data.has_more || false);
+                    await fetchStats();
+                    showToast('New articles available!', 'info');
+                }
+            }
+        } catch (e) {
+            console.error("Failed to fetch articles quietly", e);
+        }
+    };
+
     // Intersection Observer for infinite scroll
     useEffect(() => {
         if (!loadMoreRef.current) return;
@@ -135,7 +223,7 @@ export default function RSSReader() {
         observer.observe(loadMoreRef.current);
 
         return () => observer.disconnect();
-    }, [hasMore, isLoadingMore, offset, selectedFeed]);
+    }, [hasMore, isLoadingMore, offset, selectedFeed, filterMode]);
 
     const fetchStats = async () => {
         try {
@@ -173,6 +261,7 @@ export default function RSSReader() {
             await fetchFeeds();
             await fetchArticles(true);
             await fetchStats();
+            showToast('Feed added successfully!');
         } catch (e) {
             console.error("Failed to add feed", e);
             alert('Failed to add feed. Please check the URL and try again.');
@@ -195,6 +284,7 @@ export default function RSSReader() {
                     setSelectedFeed(null);
                 }
                 setFeedToDelete(null);
+                showToast('Feed deleted successfully!');
             }
         } catch (e) {
             console.error("Failed to delete feed", e);
@@ -209,13 +299,59 @@ export default function RSSReader() {
 
             if (res.ok) {
                 const data = await res.json();
-                alert(`Refreshed! Found ${data.new_articles} new articles.`);
+                showToast(`Refreshed! Found ${data.new_articles} new articles.`);
                 await fetchFeeds();
                 await fetchArticles(true);
                 await fetchStats();
             }
         } catch (e) {
             console.error("Failed to refresh feed", e);
+        }
+    };
+
+    const toggleRead = async (articleId) => {
+        try {
+            const res = await fetch(`${API_BASE}/plugins/rss-reader/articles/${articleId}/read`, {
+                method: 'POST'
+            });
+
+            if (res.ok) {
+                const data = await res.json();
+                // Update local state
+                setArticles(prev => prev.map(a =>
+                    a.id === articleId ? { ...a, is_read: data.is_read, read_at: data.read_at } : a
+                ));
+                if (selectedArticle?.id === articleId) {
+                    setSelectedArticle(prev => ({ ...prev, is_read: data.is_read, read_at: data.read_at }));
+                }
+                await fetchStats();
+                showToast(data.is_read ? 'Marked as read' : 'Marked as unread');
+            }
+        } catch (e) {
+            console.error("Failed to toggle read status", e);
+        }
+    };
+
+    const toggleStar = async (articleId) => {
+        try {
+            const res = await fetch(`${API_BASE}/plugins/rss-reader/articles/${articleId}/star`, {
+                method: 'POST'
+            });
+
+            if (res.ok) {
+                const data = await res.json();
+                // Update local state
+                setArticles(prev => prev.map(a =>
+                    a.id === articleId ? { ...a, is_starred: data.is_starred } : a
+                ));
+                if (selectedArticle?.id === articleId) {
+                    setSelectedArticle(prev => ({ ...prev, is_starred: data.is_starred }));
+                }
+                await fetchStats();
+                showToast(data.is_starred ? 'Article starred ⭐' : 'Star removed');
+            }
+        } catch (e) {
+            console.error("Failed to toggle star", e);
         }
     };
 
@@ -243,7 +379,24 @@ export default function RSSReader() {
             window.location.hash = `rss-reader/article/${article.id}`;
         }
 
-        // Don't auto-load Q&A - let user generate on demand
+        // Auto-mark as read when opening
+        if (!article.is_read) {
+            await toggleRead(article.id);
+        }
+    };
+
+    const navigateToNextArticle = () => {
+        const currentIndex = articles.findIndex(a => a.id === selectedArticle?.id);
+        if (currentIndex !== -1 && currentIndex < articles.length - 1) {
+            selectArticle(articles[currentIndex + 1]);
+        }
+    };
+
+    const navigateToPrevArticle = () => {
+        const currentIndex = articles.findIndex(a => a.id === selectedArticle?.id);
+        if (currentIndex > 0) {
+            selectArticle(articles[currentIndex - 1]);
+        }
     };
 
     const generateQA = async () => {
@@ -295,23 +448,60 @@ export default function RSSReader() {
         }
     };
 
+    const getFilterLabel = () => {
+        switch (filterMode) {
+            case 'unread': return `Unread (${stats?.unread_articles || 0})`;
+            case 'read': return 'Read';
+            case 'starred': return `Starred (${stats?.starred_articles || 0})`;
+            case 'all': return 'All Articles';
+            default: return 'All Articles';
+        }
+    };
+
     return (
         <div className="animate-fade h-full flex flex-col">
+            {/* Toast Notification */}
+            {toast && (
+                <div className="fixed top-4 right-4 z-50 animate-fade">
+                    <div className={`${toast.type === 'success' ? 'bg-green-500/90' : 'bg-blue-500/90'
+                        } text-white px-6 py-3 rounded-xl shadow-2xl backdrop-blur-xl`}>
+                        {toast.message}
+                    </div>
+                </div>
+            )}
+
             <div className="flex justify-between items-center mb-6">
                 <div>
-                    <h1 className="text-3xl font-bold">RSS Reader</h1>
+                    <h1 className="text-3xl font-bold">RSS Reader 📰</h1>
                     {stats && (
                         <p className="text-text-muted text-sm mt-1">
-                            {stats.total_feeds} feeds · {stats.total_articles} articles
+                            {stats.total_feeds} feeds · {stats.total_articles} articles · {stats.unread_articles} unread
                         </p>
                     )}
                 </div>
-                <button
-                    onClick={() => setShowAddFeed(true)}
-                    className="bg-primary text-white px-4 py-2 rounded-lg hover:bg-primary-hover transition-colors font-semibold"
-                >
-                    + Add Feed
-                </button>
+                <div className="flex gap-3 items-center">
+                    {/* Filter Dropdown */}
+                    <select
+                        value={filterMode}
+                        onChange={(e) => {
+                            setFilterMode(e.target.value);
+                            setOffset(0);
+                            setHasMore(true);
+                        }}
+                        className="bg-bg-dark/50 border border-glass-border rounded-lg px-4 py-2 text-white outline-none focus:border-primary transition-colors font-semibold"
+                    >
+                        <option value="unread">📬 Unread</option>
+                        <option value="all">📚 All Articles</option>
+                        <option value="read">✅ Read</option>
+                        <option value="starred">⭐ Starred</option>
+                    </select>
+                    <button
+                        onClick={() => setShowAddFeed(true)}
+                        className="bg-primary text-white px-4 py-2 rounded-lg hover:bg-primary-hover transition-colors font-semibold"
+                    >
+                        + Add Feed
+                    </button>
+                </div>
             </div>
 
             {/* Add Feed Modal */}
@@ -441,29 +631,37 @@ export default function RSSReader() {
 
                 {/* Articles List */}
                 {!selectedArticle ? (
-                    <div className="col-span-9 bg-bg-card backdrop-blur-xl border border-glass-border rounded-2xl p-6 overflow-y-auto">
-                        <h2 className="text-lg font-bold mb-4">
-                            {selectedFeed ? feeds.find(f => f.id === selectedFeed)?.title : 'All Articles'}
-                        </h2>
+                    <div className="col-span-9 bg-bg-card backdrop-blur-xl border border-glass-border rounded-2xl p-6 overflow-y-auto" ref={articleListRef}>
+                        <div className="flex justify-between items-center mb-4">
+                            <h2 className="text-lg font-bold">
+                                {getFilterLabel()}
+                            </h2>
+                        </div>
                         <div className="space-y-3">
                             {articles.length === 0 && (
                                 <div className="text-center text-text-muted py-12">
                                     <div className="text-6xl mb-4">📄</div>
-                                    <p>No articles yet</p>
-                                    <p className="text-sm mt-2">Add RSS feeds to see articles here</p>
+                                    <p>No articles {filterMode === 'unread' ? 'unread' : filterMode === 'starred' ? 'starred' : ''}</p>
+                                    <p className="text-sm mt-2">
+                                        {filterMode === 'unread' ? 'All caught up! 🎉' : 'Add RSS feeds to see articles here'}
+                                    </p>
                                 </div>
                             )}
                             {articles.map((article) => (
                                 <div
                                     key={article.id}
                                     onClick={() => selectArticle(article)}
-                                    className="bg-glass border border-glass-border rounded-xl p-4 cursor-pointer hover:border-primary transition-all"
+                                    className={`bg-glass border border-glass-border rounded-xl p-4 cursor-pointer hover:border-primary transition-all relative ${article.is_read ? 'opacity-50' : 'opacity-100'
+                                        }`}
                                 >
-                                    <h3 className="font-bold text-lg mb-2">{article.title}</h3>
+                                    {article.is_starred && (
+                                        <div className="absolute top-3 right-3 text-xl">⭐</div>
+                                    )}
+                                    <h3 className="font-bold text-lg mb-2 pr-8">{article.title}</h3>
                                     {article.description && (
                                         <p className="text-text-muted text-sm mb-2 line-clamp-2">{article.description}</p>
                                     )}
-                                    <div className="flex items-center gap-4 text-xs text-text-muted">
+                                    <div className="flex items-center gap-4 text-xs text-text-muted flex-wrap">
                                         <span>📅 {formatDate(article.published)}</span>
                                         {article.author && <span>✍️ {article.author}</span>}
                                         <a
@@ -473,8 +671,26 @@ export default function RSSReader() {
                                             className="text-primary hover:underline"
                                             onClick={(e) => e.stopPropagation()}
                                         >
-                                            🔗 Read Original
+                                            🔗 Original
                                         </a>
+                                        <button
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                toggleStar(article.id);
+                                            }}
+                                            className="text-text-muted hover:text-yellow-400 transition-colors"
+                                        >
+                                            {article.is_starred ? '⭐' : '☆'}
+                                        </button>
+                                        <button
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                toggleRead(article.id);
+                                            }}
+                                            className="text-text-muted hover:text-primary transition-colors"
+                                        >
+                                            {article.is_read ? '✓ Read' : '○ Unread'}
+                                        </button>
                                     </div>
                                 </div>
                             ))}
@@ -504,17 +720,28 @@ export default function RSSReader() {
                     <div className="col-span-9 bg-bg-card backdrop-blur-xl border border-glass-border rounded-2xl overflow-hidden flex flex-col">
                         {/* Article Header */}
                         <div className="p-6 border-b border-glass-border">
-                            <button
-                                onClick={() => {
-                                    setSelectedArticle(null);
-                                    window.location.hash = 'rss-reader';
-                                }}
-                                className="text-primary hover:underline mb-4 text-sm"
-                            >
-                                ← Back to Articles
-                            </button>
-                            <h2 className="text-2xl font-bold mb-2">{selectedArticle.title}</h2>
-                            <div className="flex items-center gap-4 text-sm text-text-muted">
+                            <div className="flex items-center justify-between mb-4">
+                                <button
+                                    onClick={() => {
+                                        setSelectedArticle(null);
+                                        window.location.hash = 'rss-reader';
+                                    }}
+                                    className="text-primary hover:underline text-sm"
+                                >
+                                    ← Back to Articles
+                                </button>
+                                <div className="flex gap-2 text-sm">
+                                    <span className="text-text-muted">Navigate:</span>
+                                    <kbd className="px-2 py-1 bg-glass rounded text-xs">K</kbd>
+                                    <kbd className="px-2 py-1 bg-glass rounded text-xs">J</kbd>
+                                    <span className="text-text-muted">Star:</span>
+                                    <kbd className="px-2 py-1 bg-glass rounded text-xs">S</kbd>
+                                    <span className="text-text-muted">Read:</span>
+                                    <kbd className="px-2 py-1 bg-glass rounded text-xs">M</kbd>
+                                </div>
+                            </div>
+                            <h2 className="text-3xl font-bold mb-3 leading-tight">{selectedArticle.title}</h2>
+                            <div className="flex items-center gap-4 text-sm text-text-muted flex-wrap">
                                 <span>📅 {formatDate(selectedArticle.published)}</span>
                                 {selectedArticle.author && <span>✍️ {selectedArticle.author}</span>}
                                 <a
@@ -525,22 +752,61 @@ export default function RSSReader() {
                                 >
                                     🔗 Read Original
                                 </a>
+                                <button
+                                    onClick={() => toggleStar(selectedArticle.id)}
+                                    className={`px-3 py-1 rounded-lg transition-colors ${selectedArticle.is_starred
+                                        ? 'bg-yellow-500/20 text-yellow-400'
+                                        : 'bg-glass text-text-muted hover:text-yellow-400'
+                                        }`}
+                                >
+                                    {selectedArticle.is_starred ? '⭐ Starred' : '☆ Star'}
+                                </button>
+                                <button
+                                    onClick={() => toggleRead(selectedArticle.id)}
+                                    className={`px-3 py-1 rounded-lg transition-colors ${selectedArticle.is_read
+                                        ? 'bg-green-500/20 text-green-400'
+                                        : 'bg-glass text-text-muted hover:text-primary'
+                                        }`}
+                                >
+                                    {selectedArticle.is_read ? '✓ Read' : '○ Mark Unread'}
+                                </button>
+                            </div>
+
+                            {/* Navigation Arrows */}
+                            <div className="flex gap-2 mt-4">
+                                <button
+                                    onClick={navigateToPrevArticle}
+                                    disabled={articles.findIndex(a => a.id === selectedArticle.id) === 0}
+                                    className="flex-1 bg-glass border border-glass-border text-text-main px-4 py-2 rounded-lg hover:border-primary transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                                >
+                                    ← Previous Article
+                                </button>
+                                <button
+                                    onClick={navigateToNextArticle}
+                                    disabled={articles.findIndex(a => a.id === selectedArticle.id) === articles.length - 1}
+                                    className="flex-1 bg-glass border border-glass-border text-text-main px-4 py-2 rounded-lg hover:border-primary transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                                >
+                                    Next Article →
+                                </button>
                             </div>
                         </div>
 
-                        <div className="flex-1 overflow-y-auto p-6 space-y-6">
+                        <div className="flex-1 overflow-y-auto p-8 space-y-8">
                             {/* Article Content */}
-                            <div className="prose prose-invert max-w-none">
+                            <div className="prose prose-lg prose-invert max-w-none">
                                 {(selectedArticle.content || selectedArticle.description) ? (
                                     <div
                                         dangerouslySetInnerHTML={{ __html: selectedArticle.content || selectedArticle.description }}
-                                        className="text-text-main leading-relaxed"
+                                        className="text-text-main leading-relaxed text-base"
+                                        style={{
+                                            lineHeight: '1.8',
+                                            fontSize: '1.05rem'
+                                        }}
                                     />
                                 ) : (
                                     <p className="text-text-muted">No content available for this article.</p>
                                 )}
                             </div>
-
 
                             {/* Suggested Q&A */}
                             <div className="bg-glass border border-glass-border rounded-xl p-6">
@@ -581,12 +847,11 @@ export default function RSSReader() {
                                     {suggestedQA.map((qa, idx) => (
                                         <div key={idx} className="bg-bg-dark/30 rounded-lg p-4">
                                             <div className="font-bold text-primary mb-2">Q: {qa.question}</div>
-                                            <div className="text-text-muted text-sm">A: {qa.answer}</div>
+                                            <div className="text-text-muted text-sm leading-relaxed">A: {qa.answer}</div>
                                         </div>
                                     ))}
                                 </div>
                             </div>
-
 
                             {/* Follow-up Questions */}
                             <div className="bg-glass border border-glass-border rounded-xl p-6">
@@ -603,7 +868,7 @@ export default function RSSReader() {
                                                 </div>
                                                 <div className="bg-bg-dark/30 rounded-lg p-3">
                                                     <div className="font-bold text-sm text-accent mb-1">AI answered:</div>
-                                                    <div className="text-sm text-text-muted">{qa.answer}</div>
+                                                    <div className="text-sm text-text-muted leading-relaxed">{qa.answer}</div>
                                                 </div>
                                             </div>
                                         ))}

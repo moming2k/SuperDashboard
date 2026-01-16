@@ -90,6 +90,9 @@ class Article(BaseModel):
     published: Optional[str] = None
     author: Optional[str] = None
     fetched_at: str
+    is_read: bool = False
+    is_starred: bool = False
+    read_at: Optional[str] = None
 
 
 class QuestionRequest(BaseModel):
@@ -444,21 +447,36 @@ async def refresh_feed(feed_id: str, db: Session = Depends(get_db)):
 
 
 @router.get("/articles")
-async def get_articles(feed_id: Optional[str] = None, limit: int = 50, offset: int = 0, db: Session = Depends(get_db)):
-    """Get articles, optionally filtered by feed_id, with pagination support"""
+async def get_articles(
+    feed_id: Optional[str] = None,
+    limit: int = 50,
+    offset: int = 0,
+    filter_read: Optional[str] = None,  # "unread", "read", "all", "starred"
+    db: Session = Depends(get_db)
+):
+    """Get articles, optionally filtered by feed_id and read status, with pagination support"""
     query = db.query(ArticleModel)
-    
+
     if feed_id:
         query = query.filter(ArticleModel.feed_id == feed_id)
-    
+
+    # Filter by read status
+    if filter_read == "unread":
+        query = query.filter(ArticleModel.is_read == 0)
+    elif filter_read == "read":
+        query = query.filter(ArticleModel.is_read == 1)
+    elif filter_read == "starred":
+        query = query.filter(ArticleModel.is_starred == 1)
+    # "all" or None = no filter
+
     # Get total count
     total_count = query.count()
-    
+
     # Sort by published date (most recent first), fallback to fetched_at for articles without published date
     # Limit to max 200 articles total
     effective_limit = min(limit, 200 - offset) if offset < 200 else 0
     articles = query.order_by(ArticleModel.published.desc().nullslast(), ArticleModel.fetched_at.desc()).offset(offset).limit(effective_limit).all()
-    
+
     return {
         "articles": [article.to_dict() for article in articles],
         "total_count": total_count,
@@ -522,21 +540,65 @@ async def ask_question(article_id: str, request: QuestionRequest, db: Session = 
     }
 
 
+@router.post("/articles/{article_id}/read")
+async def toggle_article_read(article_id: str, db: Session = Depends(get_db)):
+    """Toggle article read status"""
+    article = db.query(ArticleModel).filter(ArticleModel.id == article_id).first()
+    if not article:
+        raise HTTPException(status_code=404, detail="Article not found")
+
+    # Toggle read status
+    article.is_read = 1 if article.is_read == 0 else 0
+    article.read_at = datetime.utcnow() if article.is_read == 1 else None
+
+    db.commit()
+    db.refresh(article)
+
+    return {
+        "id": article.id,
+        "is_read": bool(article.is_read),
+        "read_at": article.read_at.isoformat() if article.read_at else None
+    }
+
+
+@router.post("/articles/{article_id}/star")
+async def toggle_article_star(article_id: str, db: Session = Depends(get_db)):
+    """Toggle article starred status"""
+    article = db.query(ArticleModel).filter(ArticleModel.id == article_id).first()
+    if not article:
+        raise HTTPException(status_code=404, detail="Article not found")
+
+    # Toggle starred status
+    article.is_starred = 1 if article.is_starred == 0 else 0
+
+    db.commit()
+    db.refresh(article)
+
+    return {
+        "id": article.id,
+        "is_starred": bool(article.is_starred)
+    }
+
+
 @router.get("/stats")
 async def get_stats(db: Session = Depends(get_db)):
     """Get RSS reader statistics"""
     total_feeds = db.query(FeedModel).count()
     total_articles = db.query(ArticleModel).count()
-    
+    unread_articles = db.query(ArticleModel).filter(ArticleModel.is_read == 0).count()
+    starred_articles = db.query(ArticleModel).filter(ArticleModel.is_starred == 1).count()
+
     feeds = db.query(FeedModel).all()
     articles_by_feed = {}
     for feed in feeds:
         count = db.query(ArticleModel).filter(ArticleModel.feed_id == feed.id).count()
         articles_by_feed[feed.title] = count
-    
+
     return {
         "total_feeds": total_feeds,
         "total_articles": total_articles,
+        "unread_articles": unread_articles,
+        "starred_articles": starred_articles,
         "articles_by_feed": articles_by_feed,
         "scheduler_running": scheduler.running
     }

@@ -50,6 +50,9 @@ class Article(Base):
     published = Column(DateTime, nullable=True)
     author = Column(Text, nullable=True)
     fetched_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+    is_read = Column(Integer, default=0)  # 0 = unread, 1 = read
+    is_starred = Column(Integer, default=0)  # 0 = not starred, 1 = starred
+    read_at = Column(DateTime, nullable=True)
 
     # Relationship to feed
     feed = relationship("Feed", back_populates="articles")
@@ -65,5 +68,8 @@ class Article(Base):
             "content": self.content,
             "published": self.published.isoformat() if self.published else None,
             "author": self.author,
-            "fetched_at": self.fetched_at.isoformat() if self.fetched_at else None
+            "fetched_at": self.fetched_at.isoformat() if self.fetched_at else None,
+            "is_read": bool(self.is_read),
+            "is_starred": bool(self.is_starred),
+            "read_at": self.read_at.isoformat() if self.read_at else None
         }
