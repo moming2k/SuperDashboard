@@ -101,3 +101,42 @@ def get_db():
         yield db
     finally:
         db.close()
+
+class Snippet(Base):
+    """Model for storing code snippets"""
+    __tablename__ = "snippets"
+
+    id = Column(String, primary_key=True, index=True)
+    title = Column(String, nullable=False)
+    description = Column(Text, nullable=True)
+    code = Column(Text, nullable=False)
+    language = Column(String, nullable=False)
+    visibility = Column(String, nullable=False, default="personal")  # personal, team, public
+    tags = Column(JSON, nullable=False, default=list)  # Array of tag strings
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_by = Column(String, nullable=True, default="current_user")
+    favorite = Column(Boolean, nullable=False, default=False)
+    use_count = Column(Integer, nullable=False, default=0)
+
+
+class SnippetVersion(Base):
+    """Model for storing snippet version history"""
+    __tablename__ = "snippet_versions"
+
+    id = Column(String, primary_key=True, index=True)
+    snippet_id = Column(String, nullable=False, index=True)  # Foreign key to snippets
+    version = Column(Integer, nullable=False)
+    code = Column(Text, nullable=False)
+    description = Column(String, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    created_by = Column(String, nullable=True, default="system")
+
+
+class Tag(Base):
+    """Model for storing tags and their usage counts"""
+    __tablename__ = "tags"
+
+    name = Column(String, primary_key=True, index=True)
+    count = Column(Integer, nullable=False, default=0)
+    color = Column(String, nullable=True)

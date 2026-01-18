@@ -1,10 +1,17 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 from typing import Optional, List, Dict, Any
 from datetime import datetime
 from enum import Enum
+from sqlalchemy.orm import Session
 import uuid
-import copy
+import sys
+import os
+
+# Add parent directory to path to import from backend
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../../..'))
+from backend.database import get_db
+import backend.services as services
 
 router = APIRouter()
 
@@ -113,117 +120,37 @@ class Tag(BaseModel):
     count: int
     color: Optional[str] = None
 
-# In-memory storage (replace with database in production)
-snippets_db: List[Snippet] = []
-tags_db: Dict[str, Tag] = {}
-
-# Initialize with some example snippets
-def initialize_example_snippets():
-    """Add some example snippets for demonstration"""
-    examples = [
-        Snippet(
-            id=str(uuid.uuid4()),
-            title="FastAPI Route Handler",
-            description="Basic FastAPI route with error handling",
-            code="""@app.get("/items/{item_id}")
-async def read_item(item_id: int):
-    try:
-        item = await get_item(item_id)
-        return {"item": item}
-    except ItemNotFound:
-        raise HTTPException(status_code=404, detail="Item not found")""",
-            language=SnippetLanguage.PYTHON,
-            visibility=SnippetVisibility.TEAM,
-            tags=["fastapi", "python", "api"],
-            created_at=datetime.utcnow().isoformat(),
-            updated_at=datetime.utcnow().isoformat(),
-            versions=[],
-            favorite=False,
-            use_count=0
-        ),
-        Snippet(
-            id=str(uuid.uuid4()),
-            title="React useState Hook",
-            description="Basic useState hook with TypeScript",
-            code="""const [count, setCount] = useState<number>(0);
-
-const increment = () => {
-  setCount(prev => prev + 1);
-};
-
-const decrement = () => {
-  setCount(prev => prev - 1);
-};""",
-            language=SnippetLanguage.TYPESCRIPT,
-            visibility=SnippetVisibility.TEAM,
-            tags=["react", "typescript", "hooks"],
-            created_at=datetime.utcnow().isoformat(),
-            updated_at=datetime.utcnow().isoformat(),
-            versions=[],
-            favorite=True,
-            use_count=5
-        ),
-        Snippet(
-            id=str(uuid.uuid4()),
-            title="SQL Join Query",
-            description="Common SQL join pattern with filtering",
-            code="""SELECT u.id, u.name, o.order_id, o.total
-FROM users u
-INNER JOIN orders o ON u.id = o.user_id
-WHERE o.status = 'completed'
-  AND o.created_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)
-ORDER BY o.created_at DESC
-LIMIT 100;""",
-            language=SnippetLanguage.SQL,
-            visibility=SnippetVisibility.TEAM,
-            tags=["sql", "database", "query"],
-            created_at=datetime.utcnow().isoformat(),
-            updated_at=datetime.utcnow().isoformat(),
-            versions=[],
-            favorite=False,
-            use_count=3
-        )
-    ]
-
-    for snippet in examples:
-        snippets_db.append(snippet)
-        for tag in snippet.tags:
-            if tag not in tags_db:
-                tags_db[tag] = Tag(name=tag, count=1)
-            else:
-                tags_db[tag].count += 1
-
-# Initialize on startup
-if not snippets_db:
-    initialize_example_snippets()
-
 # Helper Functions
-def update_tags(old_tags: List[str], new_tags: List[str]):
-    """Update tag counts when snippet tags change"""
-    # Decrease count for removed tags
-    for tag in old_tags:
-        if tag not in new_tags and tag in tags_db:
-            tags_db[tag].count -= 1
-            if tags_db[tag].count <= 0:
-                del tags_db[tag]
-
-    # Increase count for new tags
-    for tag in new_tags:
-        if tag not in old_tags:
-            if tag not in tags_db:
-                tags_db[tag] = Tag(name=tag, count=1)
-            else:
-                tags_db[tag].count += 1
-
-def create_version(snippet: Snippet) -> SnippetVersion:
-    """Create a new version from current snippet state"""
-    version_number = len(snippet.versions) + 1
-    return SnippetVersion(
-        version=version_number,
-        code=snippet.code,
-        description=f"Version {version_number}",
-        created_at=datetime.utcnow().isoformat(),
-        created_by=snippet.created_by or "system"
+def db_snippet_to_pydantic(db_snippet, include_versions=False):
+    """Convert database snippet to Pydantic model"""
+    versions = []
+    if include_versions:
+        db_versions = services.get_snippet_versions(None, db_snippet.id)
+        versions = [
+            SnippetVersion(
+                version=v.version,
+                code=v.code,
+                description=v.description,
+                created_at=v.created_at.isoformat() if v.created_at else "",
+                created_by=v.created_by
+            )
+            for v in db_versions
+        ]
+    
+    return Snippet(
+        id=db_snippet.id,
+        title=db_snippet.title,
+        description=db_snippet.description,
+        code=db_snippet.code,
+        language=SnippetLanguage(db_snippet.language),
+        visibility=SnippetVisibility(db_snippet.visibility),
+        tags=db_snippet.tags or [],
+        created_at=db_snippet.created_at.isoformat() if db_snippet.created_at else None,
+        updated_at=db_snippet.updated_at.isoformat() if db_snippet.updated_at else None,
+        created_by=db_snippet.created_by,
+        favorite=db_snippet.favorite,
+        use_count=db_snippet.use_count,
+        versions=versions
     )
 
 # Snippet Endpoints
@@ -235,183 +162,133 @@ async def get_snippets(
     search: Optional[str] = None,
     favorite: Optional[bool] = None,
     sort_by: str = "updated_at",
-    limit: int = 100
+    limit: int = 100,
+    db: Session = Depends(get_db)
 ):
     """Get all snippets with optional filtering"""
-    filtered_snippets = snippets_db.copy()
-
-    # Apply filters
-    if visibility:
-        filtered_snippets = [s for s in filtered_snippets if s.visibility == visibility]
-    if language:
-        filtered_snippets = [s for s in filtered_snippets if s.language == language]
-    if tag:
-        filtered_snippets = [s for s in filtered_snippets if tag in s.tags]
-    if search:
-        search_lower = search.lower()
-        filtered_snippets = [
-            s for s in filtered_snippets
-            if search_lower in s.title.lower()
-            or (s.description and search_lower in s.description.lower())
-            or search_lower in s.code.lower()
-            or any(search_lower in t.lower() for t in s.tags)
-        ]
-    if favorite is not None:
-        filtered_snippets = [s for s in filtered_snippets if s.favorite == favorite]
-
-    # Sort
-    if sort_by == "updated_at":
-        filtered_snippets.sort(key=lambda x: x.updated_at or "", reverse=True)
-    elif sort_by == "created_at":
-        filtered_snippets.sort(key=lambda x: x.created_at or "", reverse=True)
-    elif sort_by == "title":
-        filtered_snippets.sort(key=lambda x: x.title.lower())
-    elif sort_by == "use_count":
-        filtered_snippets.sort(key=lambda x: x.use_count, reverse=True)
-
-    return filtered_snippets[:limit]
+    db_snippets = services.get_snippets(
+        db, visibility=visibility, language=language, tag=tag,
+        search=search, favorite=favorite, sort_by=sort_by, limit=limit
+    )
+    return [db_snippet_to_pydantic(s) for s in db_snippets]
 
 @router.get("/snippets/{snippet_id}")
-async def get_snippet(snippet_id: str):
+async def get_snippet(snippet_id: str, db: Session = Depends(get_db)):
     """Get a specific snippet by ID"""
-    snippet = next((s for s in snippets_db if s.id == snippet_id), None)
-    if not snippet:
+    db_snippet = services.get_snippet_by_id(db, snippet_id)
+    if not db_snippet:
         raise HTTPException(status_code=404, detail="Snippet not found")
-    return snippet
+    return db_snippet_to_pydantic(db_snippet, include_versions=True)
 
 @router.post("/snippets", response_model=Snippet)
-async def create_snippet(snippet: Snippet):
+async def create_snippet(snippet: Snippet, db: Session = Depends(get_db)):
     """Create a new snippet"""
-    snippet.id = str(uuid.uuid4())
-    snippet.created_at = datetime.utcnow().isoformat()
-    snippet.updated_at = datetime.utcnow().isoformat()
-    snippet.use_count = 0
-    snippet.versions = []
-
-    # Add tags to tag database
-    for tag in snippet.tags:
-        if tag not in tags_db:
-            tags_db[tag] = Tag(name=tag, count=1)
-        else:
-            tags_db[tag].count += 1
-
-    snippets_db.append(snippet)
-    return snippet
+    snippet_id = str(uuid.uuid4())
+    
+    db_snippet = services.create_snippet(
+        db=db,
+        snippet_id=snippet_id,
+        title=snippet.title,
+        description=snippet.description,
+        code=snippet.code,
+        language=snippet.language.value,
+        visibility=snippet.visibility.value,
+        tags=snippet.tags,
+        created_by=snippet.created_by,
+        favorite=snippet.favorite
+    )
+    
+    return db_snippet_to_pydantic(db_snippet)
 
 @router.put("/snippets/{snippet_id}", response_model=Snippet)
-async def update_snippet(snippet_id: str, update: SnippetUpdate):
+async def update_snippet(snippet_id: str, update: SnippetUpdate, db: Session = Depends(get_db)):
     """Update a snippet and create a version if code changed"""
-    snippet = next((s for s in snippets_db if s.id == snippet_id), None)
-    if not snippet:
-        raise HTTPException(status_code=404, detail="Snippet not found")
-
-    # Save old tags for updating counts
-    old_tags = snippet.tags.copy()
-
-    # Create version if code is changing
-    if update.code and update.code != snippet.code:
-        version = create_version(snippet)
-        snippet.versions.append(version)
-
-    # Update fields
+    update_data = {}
+    
     if update.title:
-        snippet.title = update.title
+        update_data['title'] = update.title
     if update.description is not None:
-        snippet.description = update.description
+        update_data['description'] = update.description
     if update.code:
-        snippet.code = update.code
+        update_data['code'] = update.code
     if update.language:
-        snippet.language = update.language
+        update_data['language'] = update.language.value
     if update.visibility:
-        snippet.visibility = update.visibility
+        update_data['visibility'] = update.visibility.value
     if update.tags is not None:
-        snippet.tags = update.tags
-        update_tags(old_tags, update.tags)
+        update_data['tags'] = update.tags
     if update.favorite is not None:
-        snippet.favorite = update.favorite
-
-    snippet.updated_at = datetime.utcnow().isoformat()
-
-    return snippet
+        update_data['favorite'] = update.favorite
+    
+    db_snippet = services.update_snippet(db, snippet_id, **update_data)
+    if not db_snippet:
+        raise HTTPException(status_code=404, detail="Snippet not found")
+    
+    return db_snippet_to_pydantic(db_snippet)
 
 @router.delete("/snippets/{snippet_id}")
-async def delete_snippet(snippet_id: str):
+async def delete_snippet(snippet_id: str, db: Session = Depends(get_db)):
     """Delete a snippet"""
-    global snippets_db
-    snippet = next((s for s in snippets_db if s.id == snippet_id), None)
-    if not snippet:
+    success = services.delete_snippet(db, snippet_id)
+    if not success:
         raise HTTPException(status_code=404, detail="Snippet not found")
-
-    # Update tag counts
-    for tag in snippet.tags:
-        if tag in tags_db:
-            tags_db[tag].count -= 1
-            if tags_db[tag].count <= 0:
-                del tags_db[tag]
-
-    snippets_db = [s for s in snippets_db if s.id != snippet_id]
     return {"message": "Snippet deleted"}
 
 @router.post("/snippets/{snippet_id}/use")
-async def increment_use_count(snippet_id: str):
+async def increment_use_count(snippet_id: str, db: Session = Depends(get_db)):
     """Increment use count when snippet is copied/used"""
-    snippet = next((s for s in snippets_db if s.id == snippet_id), None)
-    if not snippet:
+    use_count = services.increment_snippet_use_count(db, snippet_id)
+    if use_count is None:
         raise HTTPException(status_code=404, detail="Snippet not found")
-
-    snippet.use_count += 1
-    return {"use_count": snippet.use_count}
+    return {"use_count": use_count}
 
 @router.post("/snippets/{snippet_id}/favorite")
-async def toggle_favorite(snippet_id: str):
+async def toggle_favorite(snippet_id: str, db: Session = Depends(get_db)):
     """Toggle favorite status of a snippet"""
-    snippet = next((s for s in snippets_db if s.id == snippet_id), None)
-    if not snippet:
+    favorite = services.toggle_snippet_favorite(db, snippet_id)
+    if favorite is None:
         raise HTTPException(status_code=404, detail="Snippet not found")
-
-    snippet.favorite = not snippet.favorite
-    return {"favorite": snippet.favorite}
+    return {"favorite": favorite}
 
 @router.get("/snippets/{snippet_id}/versions")
-async def get_snippet_versions(snippet_id: str):
+async def get_snippet_versions(snippet_id: str, db: Session = Depends(get_db)):
     """Get version history for a snippet"""
-    snippet = next((s for s in snippets_db if s.id == snippet_id), None)
-    if not snippet:
+    db_snippet = services.get_snippet_by_id(db, snippet_id)
+    if not db_snippet:
         raise HTTPException(status_code=404, detail="Snippet not found")
-
-    return snippet.versions
+    
+    db_versions = services.get_snippet_versions(db, snippet_id)
+    return [
+        SnippetVersion(
+            version=v.version,
+            code=v.code,
+            description=v.description,
+            created_at=v.created_at.isoformat() if v.created_at else "",
+            created_by=v.created_by
+        )
+        for v in db_versions
+    ]
 
 @router.post("/snippets/{snippet_id}/versions/{version_number}/restore")
-async def restore_version(snippet_id: str, version_number: int):
+async def restore_version(snippet_id: str, version_number: int, db: Session = Depends(get_db)):
     """Restore a previous version of a snippet"""
-    snippet = next((s for s in snippets_db if s.id == snippet_id), None)
-    if not snippet:
-        raise HTTPException(status_code=404, detail="Snippet not found")
-
-    version = next((v for v in snippet.versions if v.version == version_number), None)
-    if not version:
-        raise HTTPException(status_code=404, detail="Version not found")
-
-    # Create a new version with current code before restoring
-    current_version = create_version(snippet)
-    snippet.versions.append(current_version)
-
-    # Restore the old version
-    snippet.code = version.code
-    snippet.updated_at = datetime.utcnow().isoformat()
-
-    return snippet
+    db_snippet = services.restore_snippet_version(db, snippet_id, version_number)
+    if not db_snippet:
+        raise HTTPException(status_code=404, detail="Snippet or version not found")
+    return db_snippet_to_pydantic(db_snippet)
 
 # Tag Endpoints
 @router.get("/tags")
-async def get_tags():
+async def get_tags(db: Session = Depends(get_db)):
     """Get all tags with usage counts"""
-    return list(tags_db.values())
+    db_tags = services.get_all_tags(db)
+    return [Tag(name=t.name, count=t.count, color=t.color) for t in db_tags]
 
 @router.get("/tags/{tag_name}/snippets")
-async def get_snippets_by_tag(tag_name: str):
+async def get_snippets_by_tag(tag_name: str, db: Session = Depends(get_db)):
     """Get all snippets with a specific tag"""
-    return [s for s in snippets_db if tag_name in s.tags]
+    db_snippets = services.get_snippets_by_tag(db, tag_name)
+    return [db_snippet_to_pydantic(s) for s in db_snippets]
 
 # Language Endpoints
 @router.get("/languages")
@@ -423,21 +300,27 @@ async def get_supported_languages():
     ]
 
 @router.get("/stats")
-async def get_stats():
+async def get_stats(db: Session = Depends(get_db)):
     """Get snippet statistics"""
+    all_snippets = services.get_snippets(db, limit=10000)
+    
+    language_counts = {}
+    for snippet in all_snippets:
+        lang = snippet.language
+        language_counts[lang] = language_counts.get(lang, 0) + 1
+    
+    most_used_language = max(language_counts.items(), key=lambda x: x[1])[0] if language_counts else None
+    
+    total_versions = sum(len(services.get_snippet_versions(db, s.id)) for s in all_snippets)
+    
     return {
-        "total_snippets": len(snippets_db),
-        "total_tags": len(tags_db),
-        "personal_snippets": len([s for s in snippets_db if s.visibility == SnippetVisibility.PERSONAL]),
-        "team_snippets": len([s for s in snippets_db if s.visibility == SnippetVisibility.TEAM]),
-        "favorite_snippets": len([s for s in snippets_db if s.favorite]),
-        "most_used_language": max(
-            [(lang, len([s for s in snippets_db if s.language == lang]))
-             for lang in set(s.language for s in snippets_db)],
-            key=lambda x: x[1],
-            default=(None, 0)
-        )[0] if snippets_db else None,
-        "total_versions": sum(len(s.versions) for s in snippets_db)
+        "total_snippets": len(all_snippets),
+        "total_tags": len(services.get_all_tags(db)),
+        "personal_snippets": len([s for s in all_snippets if s.visibility == "personal"]),
+        "team_snippets": len([s for s in all_snippets if s.visibility == "team"]),
+        "favorite_snippets": len([s for s in all_snippets if s.favorite]),
+        "most_used_language": most_used_language,
+        "total_versions": total_versions
     }
 
 # Command Palette Integration
@@ -506,10 +389,13 @@ async def get_commands():
     }
 
 @router.get("/health")
-async def health_check():
+async def health_check(db: Session = Depends(get_db)):
     """Health check endpoint"""
+    snippets_count = len(services.get_snippets(db, limit=10000))
+    tags_count = len(services.get_all_tags(db))
+    
     return {
         "status": "healthy",
-        "snippets_count": len(snippets_db),
-        "tags_count": len(tags_db)
+        "snippets_count": snippets_count,
+        "tags_count": tags_count
     }

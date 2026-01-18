@@ -263,3 +263,265 @@ def set_dashboard_layout(db: Session, layout: List[Dict[str, Any]], user_id: str
     db.commit()
     db.refresh(layout_entry)
     return layout_entry
+
+# ==================== Snippet Services ====================
+
+def get_snippets(db: Session, visibility: Optional[str] = None, language: Optional[str] = None,
+                 tag: Optional[str] = None, search: Optional[str] = None, favorite: Optional[bool] = None,
+                 sort_by: str = "updated_at", limit: int = 100) -> List:
+    """Get snippets with optional filtering"""
+    from database import Snippet
+    query = db.query(Snippet)
+    
+    # Apply filters
+    if visibility:
+        query = query.filter(Snippet.visibility == visibility)
+    if language:
+        query = query.filter(Snippet.language == language)
+    if tag:
+        query = query.filter(Snippet.tags.contains([tag]))
+    if search:
+        search_pattern = f"%{search.lower()}%"
+        query = query.filter(
+            (Snippet.title.ilike(search_pattern)) |
+            (Snippet.description.ilike(search_pattern)) |
+            (Snippet.code.ilike(search_pattern))
+        )
+    if favorite is not None:
+        query = query.filter(Snippet.favorite == favorite)
+    
+    # Sort
+    if sort_by == "updated_at":
+        query = query.order_by(Snippet.updated_at.desc())
+    elif sort_by == "created_at":
+        query = query.order_by(Snippet.created_at.desc())
+    elif sort_by == "title":
+        query = query.order_by(Snippet.title)
+    elif sort_by == "use_count":
+        query = query.order_by(Snippet.use_count.desc())
+    
+    return query.limit(limit).all()
+
+
+def get_snippet_by_id(db: Session, snippet_id: str):
+    """Get a specific snippet by ID"""
+    from database import Snippet
+    return db.query(Snippet).filter(Snippet.id == snippet_id).first()
+
+
+def create_snippet(db: Session, snippet_id: str, title: str, code: str, language: str,
+                   description: Optional[str] = None, visibility: str = "personal",
+                   tags: List[str] = [], created_by: Optional[str] = "current_user",
+                   favorite: bool = False):
+    """Create a new snippet"""
+    from database import Snippet
+    from datetime import datetime
+    
+    db_snippet = Snippet(
+        id=snippet_id,
+        title=title,
+        description=description,
+        code=code,
+        language=language,
+        visibility=visibility,
+        tags=tags,
+        created_at=datetime.utcnow(),
+        updated_at=datetime.utcnow(),
+        created_by=created_by,
+        favorite=favorite,
+        use_count=0
+    )
+    
+    # Update tag counts
+    for tag_name in tags:
+        update_tag_count(db, tag_name, increment=True)
+    
+    db.add(db_snippet)
+    db.commit()
+    db.refresh(db_snippet)
+    return db_snippet
+
+
+def update_snippet(db: Session, snippet_id: str, **kwargs):
+    """Update a snippet"""
+    from datetime import datetime
+    db_snippet = get_snippet_by_id(db, snippet_id)
+    if not db_snippet:
+        return None
+    
+    old_tags = db_snippet.tags.copy() if db_snippet.tags else []
+    
+    # Create version if code is changing
+    if 'code' in kwargs and kwargs['code'] and kwargs['code'] != db_snippet.code:
+        create_snippet_version(db, db_snippet)
+    
+    # Update fields
+    for key, value in kwargs.items():
+        if hasattr(db_snippet, key) and value is not None:
+            setattr(db_snippet, key, value)
+    
+    # Update tag counts if tags changed
+    if 'tags' in kwargs:
+        new_tags = kwargs['tags'] or []
+        for tag in old_tags:
+            if tag not in new_tags:
+                update_tag_count(db, tag, increment=False)
+        for tag in new_tags:
+            if tag not in old_tags:
+                update_tag_count(db, tag, increment=True)
+    
+    db_snippet.updated_at = datetime.utcnow()
+    db.commit()
+    db.refresh(db_snippet)
+    return db_snippet
+
+
+def delete_snippet(db: Session, snippet_id: str) -> bool:
+    """Delete a snippet"""
+    db_snippet = get_snippet_by_id(db, snippet_id)
+    if not db_snippet:
+        return False
+    
+    # Update tag counts
+    for tag_name in db_snippet.tags:
+        update_tag_count(db, tag_name, increment=False)
+    
+    # Delete associated versions
+    from database import SnippetVersion
+    db.query(SnippetVersion).filter(SnippetVersion.snippet_id == snippet_id).delete()
+    
+    db.delete(db_snippet)
+    db.commit()
+    return True
+
+
+def increment_snippet_use_count(db: Session, snippet_id: str) -> Optional[int]:
+    """Increment use count when snippet is used"""
+    db_snippet = get_snippet_by_id(db, snippet_id)
+    if not db_snippet:
+        return None
+    
+    db_snippet.use_count += 1
+    db.commit()
+    db.refresh(db_snippet)
+    return db_snippet.use_count
+
+
+def toggle_snippet_favorite(db: Session, snippet_id: str) -> Optional[bool]:
+    """Toggle favorite status"""
+    db_snippet = get_snippet_by_id(db, snippet_id)
+    if not db_snippet:
+        return None
+    
+    db_snippet.favorite = not db_snippet.favorite
+    db.commit()
+    db.refresh(db_snippet)
+    return db_snippet.favorite
+
+
+# ==================== Snippet Version Services ====================
+
+def get_snippet_versions(db: Session, snippet_id: str):
+    """Get all versions for a snippet"""
+    from database import SnippetVersion
+    return db.query(SnippetVersion).filter(
+        SnippetVersion.snippet_id == snippet_id
+    ).order_by(SnippetVersion.version).all()
+
+
+def create_snippet_version(db: Session, snippet):
+    """Create a new version from current snippet state"""
+    from database import SnippetVersion
+    from datetime import datetime
+    import uuid
+    
+    existing_versions = get_snippet_versions(db, snippet.id)
+    version_number = len(existing_versions) + 1
+    
+    db_version = SnippetVersion(
+        id=str(uuid.uuid4()),
+        snippet_id=snippet.id,
+        version=version_number,
+        code=snippet.code,
+        description=f"Version {version_number}",
+        created_at=datetime.utcnow(),
+        created_by=snippet.created_by or "system"
+    )
+    
+    db.add(db_version)
+    db.commit()
+    db.refresh(db_version)
+    return db_version
+
+
+def restore_snippet_version(db: Session, snippet_id: str, version_number: int):
+    """Restore a previous version"""
+    from database import SnippetVersion
+    from datetime import datetime
+    
+    db_snippet = get_snippet_by_id(db, snippet_id)
+    if not db_snippet:
+        return None
+    
+    db_version = db.query(SnippetVersion).filter(
+        SnippetVersion.snippet_id == snippet_id,
+        SnippetVersion.version == version_number
+    ).first()
+    
+    if not db_version:
+        return None
+    
+    # Create version with current code before restoring
+    create_snippet_version(db, db_snippet)
+    
+    # Restore old version
+    db_snippet.code = db_version.code
+    db_snippet.updated_at = datetime.utcnow()
+    db.commit()
+    db.refresh(db_snippet)
+    return db_snippet
+
+
+# ==================== Tag Services ====================
+
+def get_all_tags(db: Session):
+    """Get all tags with counts"""
+    from database import Tag
+    return db.query(Tag).all()
+
+
+def get_tag_by_name(db: Session, tag_name: str):
+    """Get a specific tag"""
+    from database import Tag
+    return db.query(Tag).filter(Tag.name == tag_name).first()
+
+
+def update_tag_count(db: Session, tag_name: str, increment: bool = True):
+    """Update tag count (increment or decrement)"""
+    from database import Tag
+    
+    db_tag = get_tag_by_name(db, tag_name)
+    
+    if increment:
+        if db_tag:
+            db_tag.count += 1
+        else:
+            db_tag = Tag(name=tag_name, count=1)
+            db.add(db_tag)
+    else:
+        if db_tag:
+            db_tag.count -= 1
+            if db_tag.count <= 0:
+                db.delete(db_tag)
+                db.commit()
+                return
+    
+    db.commit()
+    if db_tag in db:
+        db.refresh(db_tag)
+
+
+def get_snippets_by_tag(db: Session, tag_name: str):
+    """Get all snippets with a specific tag"""
+    from database import Snippet
+    return db.query(Snippet).filter(Snippet.tags.contains([tag_name])).all()
