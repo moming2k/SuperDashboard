@@ -19,10 +19,16 @@ class Config:
         # Database (REQUIRED)
         self.database_url: str = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/superdashboard")
 
-        # CORS Configuration
         cors_origins = os.getenv("CORS_ORIGINS", "*")
         if cors_origins == "*":
-            self.allowed_origins = ["*"]
+            # Allow all origins plus explicit local development URLs
+            self.allowed_origins = [
+                "*",
+                "http://localhost:5173",
+                "http://127.0.0.1:5173",
+                "http://localhost:8000",
+                "http://127.0.0.1:8000"
+            ]
         else:
             self.allowed_origins = [origin.strip() for origin in cors_origins.split(",")]
 

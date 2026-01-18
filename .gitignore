@@ -50,3 +50,5 @@ dist-ssr/
 
 # Reference code (not for commit)
 example/
+backend-dev.log
+frontend-dev.log

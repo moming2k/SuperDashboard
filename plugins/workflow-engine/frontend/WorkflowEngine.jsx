@@ -6,10 +6,10 @@ import WorkflowCanvas from './components/WorkflowCanvas';
 import NodePalette from './components/NodePalette';
 import { NodeProperties, ExecutionsPanel } from './components/SharedComponents';
 import WorkflowErrorBoundary from './components/WorkflowErrorBoundary';
-import ConfirmDialog from './components/ConfirmDialog';
 import TemplateSelector from './components/TemplateSelector';
 import { createTriggerNode, createActionNode, createLogicNode, NodeTypes } from './utils/nodeFactory';
 import { migrateWorkflow, convertToLegacyFormat } from './utils/workflowMigration';
+import useHistory from './hooks/useHistory';
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
 
@@ -90,34 +90,48 @@ function WorkflowDesigner({
     executions,
     saving = false,
 }) {
-    const [nodes, setNodes] = useState(workflow.nodes || []);
-    const [edges, setEdges] = useState(workflow.edges || []);
+    // Use history hook for undo/redo functionality
+    const {
+        state: workflowState,
+        setState: setWorkflowState,
+        undo,
+        redo,
+        canUndo,
+        canRedo,
+    } = useHistory({ nodes: workflow.nodes || [], edges: workflow.edges || [] });
+
+    const nodes = workflowState.nodes;
+    const edges = workflowState.edges;
+
+    const setNodes = useCallback((nodesOrUpdater) => {
+        setWorkflowState((prev) => ({
+            ...prev,
+            nodes: typeof nodesOrUpdater === 'function' ? nodesOrUpdater(prev.nodes) : nodesOrUpdater,
+        }));
+    }, [setWorkflowState]);
+
+    const setEdges = useCallback((edgesOrUpdater) => {
+        setWorkflowState((prev) => ({
+            ...prev,
+            edges: typeof edgesOrUpdater === 'function' ? edgesOrUpdater(prev.edges) : edgesOrUpdater,
+        }));
+    }, [setWorkflowState]);
+
     const [selectedNode, setSelectedNode] = useState(null);
     const [showExecutions, setShowExecutions] = useState(false);
-    const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-    const [nodeToDelete, setNodeToDelete] = useState(null);
     const reactFlowWrapper = useRef(null);
     const { screenToFlowPosition } = useReactFlow();
 
-    // Handle node deletion
+    // Handle node deletion (no confirmation needed with undo/redo)
     const handleDeleteNode = useCallback((nodeId) => {
-        setNodeToDelete(nodeId);
-        setShowDeleteConfirm(true);
-    }, []);
-
-    const confirmDelete = useCallback(() => {
-        if (nodeToDelete) {
-            setNodes((nds) => nds.filter((node) => node.id !== nodeToDelete));
-            setEdges((eds) => eds.filter((edge) =>
-                edge.source !== nodeToDelete && edge.target !== nodeToDelete
-            ));
-            if (selectedNode?.id === nodeToDelete) {
-                setSelectedNode(null);
-            }
+        setNodes((nds) => nds.filter((node) => node.id !== nodeId));
+        setEdges((eds) => eds.filter((edge) =>
+            edge.source !== nodeId && edge.target !== nodeId
+        ));
+        if (selectedNode?.id === nodeId) {
+            setSelectedNode(null);
         }
-        setShowDeleteConfirm(false);
-        setNodeToDelete(null);
-    }, [nodeToDelete, selectedNode]);
+    }, [selectedNode, setNodes, setEdges]);
 
     // Handle node duplication
     const handleDuplicateNode = useCallback((nodeId) => {
@@ -164,13 +178,20 @@ function WorkflowDesigner({
             y: event.clientY,
         });
 
+        // Offset position to center the node on the cursor
+        // Typical node is ~200px wide and ~100px tall
+        const centeredPosition = {
+            x: position.x - 100, // Half of typical node width
+            y: position.y - 50,  // Half of typical node height
+        };
+
         let newNode;
         if (data.nodeType === NodeTypes.TRIGGER) {
-            newNode = createTriggerNode(position, data.nodeData.triggerType, data.nodeData);
+            newNode = createTriggerNode(centeredPosition, data.nodeData.triggerType, data.nodeData);
         } else if (data.nodeType === NodeTypes.ACTION) {
-            newNode = createActionNode(position, data.nodeData.plugin, data.nodeData.action, data.nodeData);
+            newNode = createActionNode(centeredPosition, data.nodeData.plugin, data.nodeData.action, data.nodeData);
         } else if (data.nodeType === NodeTypes.LOGIC) {
-            newNode = createLogicNode(position, data.nodeData.logicType, data.nodeData);
+            newNode = createLogicNode(centeredPosition, data.nodeData.logicType, data.nodeData);
         }
 
         if (newNode) {
@@ -231,11 +252,33 @@ function WorkflowDesigner({
         await onSave(workflowData);
     };
 
-    // Sync nodes/edges with workflow
+    // Keyboard shortcuts for undo/redo
     useEffect(() => {
-        setNodes(workflow.nodes || []);
-        setEdges(workflow.edges || []);
-    }, [workflow]);
+        const handleKeyDown = (e) => {
+            // Check for Ctrl+Z (or Cmd+Z on Mac) for undo
+            if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
+                e.preventDefault();
+                if (canUndo) {
+                    undo();
+                }
+            }
+            // Check for Ctrl+Shift+Z (or Cmd+Shift+Z on Mac) for redo
+            if ((e.ctrlKey || e.metaKey) && e.key === 'z' && e.shiftKey) {
+                e.preventDefault();
+                if (canRedo) {
+                    redo();
+                }
+            }
+        };
+
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [undo, redo, canUndo, canRedo]);
+
+    // Sync nodes/edges with workflow when workflow changes
+    useEffect(() => {
+        setWorkflowState({ nodes: workflow.nodes || [], edges: workflow.edges || [] });
+    }, [workflow.id]); // Only sync when workflow ID changes, not on every workflow update
 
     return (
         <div className="flex gap-4 h-[calc(100vh-200px)]">
@@ -273,6 +316,23 @@ function WorkflowDesigner({
                     </div>
 
                     <div className="flex gap-2">
+                        {/* Undo/Redo buttons */}
+                        <button
+                            onClick={undo}
+                            disabled={!canUndo}
+                            className="px-3 py-2 bg-glass border border-glass-border text-text-main rounded-lg hover:bg-glass-hover transition-all disabled:opacity-30 disabled:cursor-not-allowed text-sm"
+                            title="Undo (Ctrl+Z)"
+                        >
+                            ↶ Undo
+                        </button>
+                        <button
+                            onClick={redo}
+                            disabled={!canRedo}
+                            className="px-3 py-2 bg-glass border border-glass-border text-text-main rounded-lg hover:bg-glass-hover transition-all disabled:opacity-30 disabled:cursor-not-allowed text-sm"
+                            title="Redo (Ctrl+Shift+Z)"
+                        >
+                            ↷ Redo
+                        </button>
                         <button
                             onClick={() => setShowExecutions(!showExecutions)}
                             className="px-4 py-2 bg-accent text-white rounded-lg hover:bg-accent-hover transition-all text-sm"
@@ -333,17 +393,6 @@ function WorkflowDesigner({
                     availablePlugins={availablePlugins}
                 />
             )}
-
-            {/* Delete Confirmation Dialog */}
-            <ConfirmDialog
-                isOpen={showDeleteConfirm}
-                title="Delete Node?"
-                message="Are you sure you want to delete this node? All connections to this node will also be removed. This action cannot be undone."
-                onConfirm={confirmDelete}
-                onCancel={() => setShowDeleteConfirm(false)}
-                confirmText="Delete"
-                confirmStyle="danger"
-            />
         </div>
     );
 }

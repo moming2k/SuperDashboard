@@ -85,7 +85,7 @@ const NodePalette = ({ availablePlugins = [], onNodeDragStart }) => {
     }
 
     return (
-        <div className="w-72 bg-glass backdrop-blur-xl border border-glass-border rounded-xl p-4 overflow-y-auto">
+        <div className="w-fit min-w-[240px] max-w-sm bg-glass backdrop-blur-xl border border-glass-border rounded-xl p-4 overflow-y-auto">
             {/* Header */}
             <div className="flex justify-between items-center mb-4">
                 <h3 className="text-lg font-bold text-text-main">Node Palette</h3>

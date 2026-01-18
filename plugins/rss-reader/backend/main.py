@@ -66,8 +66,6 @@ def init_scheduler():
         print(f"⚠️  Failed to start RSS scheduler: {e}")
         print("   Scheduler will not run but plugin will still work")
 
-# Start scheduler when module loads
-init_scheduler()
 
 
 class RSSFeed(BaseModel):
@@ -234,6 +232,10 @@ async def fetch_all_feeds():
         print("✅ Scheduled RSS fetch completed")
     finally:
         db.close()
+
+
+# Start scheduler after fetch_all_feeds is defined
+init_scheduler()
 
 
 async def generate_article_qa(article: Article, num_questions: int = 5, language: str = "Traditional Chinese") -> List[QAPair]:
