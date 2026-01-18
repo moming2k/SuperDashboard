@@ -23,11 +23,13 @@ export default function RSSReader() {
     const [offset, setOffset] = useState(0);
     const [hasMore, setHasMore] = useState(true);
     const [isLoadingMore, setIsLoadingMore] = useState(false);
+    const [lastSelectedIndex, setLastSelectedIndex] = useState(null); // Track position in list for keyboard nav
     const [qaLanguage, setQaLanguage] = useState('Traditional Chinese');
     const [filterMode, setFilterMode] = useState('unread'); // 'unread', 'read', 'all', 'starred'
     const [toast, setToast] = useState(null); // For notifications
     const loadMoreRef = useRef(null);
     const articleListRef = useRef(null);
+    const articleContentRef = useRef(null);
 
     // Show toast notification
     const showToast = (message, type = 'success') => {
@@ -86,12 +88,43 @@ export default function RSSReader() {
                 } else if (e.key === 'm') {
                     e.preventDefault();
                     toggleRead(selectedArticle.id);
+                } else if (e.key === 'u') {
+                    e.preventDefault();
+                    // Scroll up by one viewport height
+                    if (articleContentRef.current) {
+                        articleContentRef.current.scrollBy({
+                            top: -window.innerHeight * 0.8,
+                            behavior: 'smooth'
+                        });
+                    }
                 }
             } else {
-                // In list mode
-                if (e.key === 'j' || e.key === 'k') {
+                // In list mode - navigate through article list
+                if (e.key === 'j') {
                     e.preventDefault();
-                    // Could add list navigation here
+                    // Move to previous article in list
+                    if (articles.length > 0) {
+                        // Find current selected or start from beginning
+                        const currentIndex = lastSelectedIndex !== null ? lastSelectedIndex : -1;
+                        const prevIndex = currentIndex - 1;
+                        if (prevIndex >= 0) {
+                            const article = articles[prevIndex];
+                            selectArticle(article);
+                            setLastSelectedIndex(prevIndex);
+                        }
+                    }
+                } else if (e.key === 'k') {
+                    e.preventDefault();
+                    // Move to next article in list
+                    if (articles.length > 0) {
+                        const currentIndex = lastSelectedIndex !== null ? lastSelectedIndex : -1;
+                        const nextIndex = currentIndex + 1;
+                        if (nextIndex < articles.length) {
+                            const article = articles[nextIndex];
+                            selectArticle(article);
+                            setLastSelectedIndex(nextIndex);
+                        }
+                    }
                 }
             }
         };
@@ -158,7 +191,12 @@ export default function RSSReader() {
                 setArticles(data.articles || []);
                 setOffset(data.articles?.length || 0);
             } else {
-                setArticles(prev => [...prev, ...(data.articles || [])]);
+                // Deduplicate articles by ID to prevent React key conflicts
+                setArticles(prev => {
+                    const existingIds = new Set(prev.map(a => a.id));
+                    const newArticles = (data.articles || []).filter(a => !existingIds.has(a.id));
+                    return [...prev, ...newArticles];
+                });
                 setOffset(prev => prev + (data.articles?.length || 0));
             }
 
@@ -374,6 +412,20 @@ export default function RSSReader() {
         setQAHistory([]);
         setSuggestedQA([]);
 
+        // Track the index for keyboard navigation
+        const index = articles.findIndex(a => a.id === article.id);
+        if (index !== -1) {
+            setLastSelectedIndex(index);
+        }
+
+        // Scroll to top of article content
+        if (articleContentRef.current) {
+            articleContentRef.current.scrollTo({
+                top: 0,
+                behavior: 'smooth'
+            });
+        }
+
         // Update URL hash with article ID
         if (updateUrl) {
             window.location.hash = `rss-reader/article/${article.id}`;
@@ -389,6 +441,7 @@ export default function RSSReader() {
         const currentIndex = articles.findIndex(a => a.id === selectedArticle?.id);
         if (currentIndex !== -1 && currentIndex < articles.length - 1) {
             selectArticle(articles[currentIndex + 1]);
+            setLastSelectedIndex(currentIndex + 1);
         }
     };
 
@@ -396,6 +449,7 @@ export default function RSSReader() {
         const currentIndex = articles.findIndex(a => a.id === selectedArticle?.id);
         if (currentIndex > 0) {
             selectArticle(articles[currentIndex - 1]);
+            setLastSelectedIndex(currentIndex - 1);
         }
     };
 
@@ -738,6 +792,9 @@ export default function RSSReader() {
                                     <kbd className="px-2 py-1 bg-glass rounded text-xs">S</kbd>
                                     <span className="text-text-muted">Read:</span>
                                     <kbd className="px-2 py-1 bg-glass rounded text-xs">M</kbd>
+                                    <span className="text-text-muted">Scroll:</span>
+                                    <kbd className="px-2 py-1 bg-glass rounded text-xs">U</kbd>
+                                    <kbd className="px-2 py-1 bg-glass rounded text-xs">Space</kbd>
                                 </div>
                             </div>
                             <h2 className="text-3xl font-bold mb-3 leading-tight">{selectedArticle.title}</h2>
@@ -791,7 +848,7 @@ export default function RSSReader() {
                             </div>
                         </div>
 
-                        <div className="flex-1 overflow-y-auto p-8 space-y-8">
+                        <div ref={articleContentRef} className="flex-1 overflow-y-auto p-8 space-y-8">
                             {/* Article Content */}
                             <div className="prose prose-lg prose-invert max-w-none">
                                 {(selectedArticle.content || selectedArticle.description) ? (
@@ -806,6 +863,23 @@ export default function RSSReader() {
                                 ) : (
                                     <p className="text-text-muted">No content available for this article.</p>
                                 )}
+                                <style>{`
+                                    .prose img {
+                                        max-width: 400px;
+                                        height: auto;
+                                        float: left;
+                                        margin: 0 1.5rem 1rem 0;
+                                        border-radius: 8px;
+                                    }
+                                    .prose p {
+                                        clear: none;
+                                    }
+                                    .prose::after {
+                                        content: "";
+                                        display: table;
+                                        clear: both;
+                                    }
+                                `}</style>
                             </div>
 
                             {/* Suggested Q&A */}
