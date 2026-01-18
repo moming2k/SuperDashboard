@@ -6,6 +6,7 @@ from fastapi import FastAPI, UploadFile, File, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List, Optional, Dict, Any
+from datetime import datetime as dt
 from sqlalchemy.orm import Session
 
 # Import configuration and validation
@@ -51,6 +52,8 @@ class Task(BaseModel):
     title: str
     description: Optional[str] = None
     status: str = "pending"
+    priority: str = "medium"  # low, medium, high, urgent
+    due_date: Optional[str] = None  # ISO format datetime string
     assigned_to: Optional[str] = "user"
 
 class MCPServer(BaseModel):
@@ -223,6 +226,8 @@ async def get_tasks(db: Session = Depends(get_db)):
         title=t.title,
         description=t.description,
         status=t.status,
+        priority=t.priority,
+        due_date=t.due_date.isoformat() if t.due_date else None,
         assigned_to=t.assigned_to
     ) for t in db_tasks]
 
@@ -231,12 +236,23 @@ async def create_task(task: Task, db: Session = Depends(get_db)):
     """Create a new task"""
     import uuid
     task_id = str(uuid.uuid4())
+    
+    # Parse due_date if provided
+    due_date = None
+    if task.due_date:
+        try:
+            due_date = dt.fromisoformat(task.due_date.replace('Z', '+00:00'))
+        except:
+            pass
+    
     db_task = services.create_task(
         db=db,
         task_id=task_id,
         title=task.title,
         description=task.description,
         status=task.status,
+        priority=task.priority,
+        due_date=due_date,
         assigned_to=task.assigned_to
     )
     return Task(
@@ -244,8 +260,52 @@ async def create_task(task: Task, db: Session = Depends(get_db)):
         title=db_task.title,
         description=db_task.description,
         status=db_task.status,
+        priority=db_task.priority,
+        due_date=db_task.due_date.isoformat() if db_task.due_date else None,
         assigned_to=db_task.assigned_to
     )
+
+@app.patch("/tasks/{task_id}", response_model=Task)
+async def update_task(task_id: str, task: Task, db: Session = Depends(get_db)):
+    """Update a task"""
+    # Parse due_date if provided
+    update_data = {
+        "title": task.title,
+        "description": task.description,
+        "status": task.status,
+        "priority": task.priority,
+        "assigned_to": task.assigned_to
+    }
+    
+    if task.due_date:
+        try:
+            update_data["due_date"] = dt.fromisoformat(task.due_date.replace('Z', '+00:00'))
+        except:
+            pass
+    else:
+        update_data["due_date"] = None
+    
+    db_task = services.update_task(db, task_id, **update_data)
+    if not db_task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    
+    return Task(
+        id=db_task.id,
+        title=db_task.title,
+        description=db_task.description,
+        status=db_task.status,
+        priority=db_task.priority,
+        due_date=db_task.due_date.isoformat() if db_task.due_date else None,
+        assigned_to=db_task.assigned_to
+    )
+
+@app.delete("/tasks/{task_id}")
+async def delete_task(task_id: str, db: Session = Depends(get_db)):
+    """Delete a task"""
+    success = services.delete_task(db, task_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Task not found")
+    return {"message": "Task deleted successfully"}
 
 # ==================== AI Agent Endpoints ====================
 

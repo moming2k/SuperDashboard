@@ -20,13 +20,16 @@ def get_task_by_id(db: Session, task_id: str) -> Optional[Task]:
 
 
 def create_task(db: Session, task_id: str, title: str, description: Optional[str] = None,
-                status: str = "pending", assigned_to: Optional[str] = "user") -> Task:
+                status: str = "pending", priority: str = "medium", due_date: Optional[Any] = None,
+                assigned_to: Optional[str] = "user") -> Task:
     """Create a new task"""
     db_task = Task(
         id=task_id,
         title=title,
         description=description,
         status=status,
+        priority=priority,
+        due_date=due_date,
         assigned_to=assigned_to
     )
     db.add(db_task)

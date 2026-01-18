@@ -37,6 +37,8 @@ class Task(Base):
     title = Column(String, nullable=False)
     description = Column(Text, nullable=True)
     status = Column(String, nullable=False, default="pending")
+    priority = Column(String, nullable=False, default="medium")  # low, medium, high, urgent
+    due_date = Column(DateTime, nullable=True)
     assigned_to = Column(String, nullable=True, default="user")
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
