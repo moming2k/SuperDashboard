@@ -76,10 +76,10 @@ export default function RSSReader() {
                     window.location.hash = 'rss-reader';
                 } else if (e.key === 'j') {
                     e.preventDefault();
-                    navigateToNextArticle();
+                    navigateToPrevArticle();
                 } else if (e.key === 'k') {
                     e.preventDefault();
-                    navigateToPrevArticle();
+                    navigateToNextArticle();
                 } else if (e.key === 's') {
                     e.preventDefault();
                     toggleStar(selectedArticle.id);
@@ -732,8 +732,8 @@ export default function RSSReader() {
                                 </button>
                                 <div className="flex gap-2 text-sm">
                                     <span className="text-text-muted">Navigate:</span>
-                                    <kbd className="px-2 py-1 bg-glass rounded text-xs">K</kbd>
                                     <kbd className="px-2 py-1 bg-glass rounded text-xs">J</kbd>
+                                    <kbd className="px-2 py-1 bg-glass rounded text-xs">K</kbd>
                                     <span className="text-text-muted">Star:</span>
                                     <kbd className="px-2 py-1 bg-glass rounded text-xs">S</kbd>
                                     <span className="text-text-muted">Read:</span>
