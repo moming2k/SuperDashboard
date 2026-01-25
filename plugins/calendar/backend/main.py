@@ -14,7 +14,7 @@ import os
 # Add plugin directories to sys.path for imports
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../..'))
 
-from shared.database import get_db, init_db, Base
+from shared.database import get_db, init_db
 from models import CalendarEvent
 
 router = APIRouter()
