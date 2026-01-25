@@ -544,10 +544,16 @@ def get_suite_by_name(db: Session, suite_name: str) -> Optional[Suite]:
 
 def create_suite(db: Session, name: str, display_name: str, description: Optional[str] = None,
                  icon: str = "📦", category: Optional[str] = None,
-                 plugins_required: List[str] = [], plugins_recommended: List[str] = [],
-                 plugins_optional: List[str] = [], default_config: Optional[Dict] = None,
+                 plugins_required: Optional[List[str]] = None, plugins_recommended: Optional[List[str]] = None,
+                 plugins_optional: Optional[List[str]] = None, default_config: Optional[Dict] = None,
                  onboarding_steps: Optional[List[Dict]] = None, theme: Optional[Dict] = None) -> Suite:
     """Create a new suite"""
+    if plugins_required is None:
+        plugins_required = []
+    if plugins_recommended is None:
+        plugins_recommended = []
+    if plugins_optional is None:
+        plugins_optional = []
     db_suite = Suite(
         name=name,
         display_name=display_name,
