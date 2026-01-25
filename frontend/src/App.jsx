@@ -89,21 +89,27 @@ const PluginComponent = ({ plugin, props }) => {
 const SuitesView = ({ activeSuite, onSelectSuite, onDeactivate }) => {
   const [suites, setSuites] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  const fetchSuites = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const res = await fetch(`${API_BASE}/suites`);
+      if (!res.ok) {
+        throw new Error('Failed to fetch suites');
+      }
+      const data = await res.json();
+      setSuites(data.suites || []);
+      setLoading(false);
+    } catch (e) {
+      console.error("Failed to fetch suites", e);
+      setError('Failed to load suites. Please try again.');
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    const fetchSuites = async () => {
-      try {
-        const res = await fetch(`${API_BASE}/suites`);
-        if (res.ok) {
-          const data = await res.json();
-          setSuites(data.suites || []);
-        }
-        setLoading(false);
-      } catch (e) {
-        console.error("Failed to fetch suites", e);
-        setLoading(false);
-      }
-    };
     fetchSuites();
   }, []);
 
@@ -112,6 +118,23 @@ const SuitesView = ({ activeSuite, onSelectSuite, onDeactivate }) => {
       <div className="animate-fade">
         <h1 className="text-3xl font-bold mb-8">Suites</h1>
         <p className="text-text-muted">Loading suites...</p>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="animate-fade">
+        <h1 className="text-3xl font-bold mb-8">Suites</h1>
+        <div className="p-4 bg-red-500/10 border border-red-500/30 rounded-xl text-red-400">
+          {error}
+          <button
+            onClick={fetchSuites}
+            className="ml-4 underline hover:no-underline"
+          >
+            Retry
+          </button>
+        </div>
       </div>
     );
   }

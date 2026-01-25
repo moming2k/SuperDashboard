@@ -37,17 +37,15 @@ validate_startup_config()
 async def lifespan(app: FastAPI):
     """Startup and shutdown event handler"""
     # Startup: Initialize database and seed default data
+    from database import SessionLocal
     init_db()
-    db_session = next(get_db())
+    db_session = SessionLocal()
     try:
         services.seed_default_suites(db_session)
     finally:
         db_session.close()
 
     yield  # Application runs here
-
-    # Shutdown: Cleanup if needed
-    pass
 
 
 app = FastAPI(title="SuperDashboard API", lifespan=lifespan)

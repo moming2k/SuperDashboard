@@ -692,6 +692,20 @@ def deactivate_user_suite(db: Session, user_id: str = "default") -> bool:
     if not selection:
         return False
 
+    # Restore plugin states - disable non-core plugins that were enabled by the suite
+    suite = get_suite_by_name(db, selection.suite_name)
+    if suite:
+        all_suite_plugins = set(
+            (suite.plugins_required or []) +
+            (suite.plugins_recommended or []) +
+            (suite.plugins_optional or [])
+        )
+        # Disable plugins that were part of the suite (except core plugins)
+        for plugin_name in all_suite_plugins:
+            plugin_state = get_plugin_state(db, plugin_name)
+            if plugin_state and not plugin_state.is_core:
+                plugin_state.enabled = False
+
     selection.is_active = False
     db.commit()
     return True

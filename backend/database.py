@@ -63,7 +63,7 @@ class PluginState(Base):
     plugin_name = Column(String, primary_key=True, index=True)
     enabled = Column(Boolean, nullable=False, default=True)
     is_core = Column(Boolean, nullable=False, default=False)
-    config = Column(JSON, nullable=True, default=dict)
+    config = Column(JSON, nullable=True, default=lambda: {})
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -83,7 +83,7 @@ class DashboardLayout(Base):
     __tablename__ = "dashboard_layouts"
 
     user_id = Column(String, primary_key=True, index=True, default="default")  # Support multi-user in future
-    layout = Column(JSON, nullable=False, default=list)  # Stores react-grid-layout format
+    layout = Column(JSON, nullable=False, default=lambda: [])  # Stores react-grid-layout format
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -112,7 +112,7 @@ class Snippet(Base):
     code = Column(Text, nullable=False)
     language = Column(String, nullable=False)
     visibility = Column(String, nullable=False, default="personal")  # personal, team, public
-    tags = Column(JSON, nullable=False, default=list)  # Array of tag strings
+    tags = Column(JSON, nullable=False, default=lambda: [])  # Array of tag strings
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     created_by = Column(String, nullable=True, default="current_user")
@@ -151,9 +151,9 @@ class Suite(Base):
     description = Column(Text, nullable=True)
     icon = Column(String, nullable=False, default="📦")
     category = Column(String, nullable=True)
-    plugins_required = Column(JSON, nullable=False, default=list)  # List of required plugin names
-    plugins_recommended = Column(JSON, nullable=False, default=list)  # List of recommended plugin names
-    plugins_optional = Column(JSON, nullable=False, default=list)  # List of optional plugin names
+    plugins_required = Column(JSON, nullable=False, default=lambda: [])  # List of required plugin names
+    plugins_recommended = Column(JSON, nullable=False, default=lambda: [])  # List of recommended plugin names
+    plugins_optional = Column(JSON, nullable=False, default=lambda: [])  # List of optional plugin names
     default_config = Column(JSON, nullable=True)  # Default dashboard/AI config for suite
     onboarding_steps = Column(JSON, nullable=True)  # Onboarding wizard steps
     theme = Column(JSON, nullable=True)  # Theme customization for suite
@@ -172,7 +172,7 @@ class UserSuiteSelection(Base):
     id = Column(String, primary_key=True, index=True)
     user_id = Column(String, nullable=False, index=True, default="default")  # Support multi-user
     suite_name = Column(String, nullable=False, index=True)  # Reference to suite
-    enabled_plugins = Column(JSON, nullable=False, default=list)  # List of enabled plugin names
+    enabled_plugins = Column(JSON, nullable=False, default=lambda: [])  # List of enabled plugin names
     onboarding_data = Column(JSON, nullable=True)  # User's onboarding responses
     is_active = Column(Boolean, nullable=False, default=True)  # Current active suite for user
     activated_at = Column(DateTime, default=datetime.utcnow)
