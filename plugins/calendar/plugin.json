@@ -1,0 +1,90 @@
+{
+    "name": "calendar",
+    "displayName": "Calendar",
+    "description": "Event calendar with reminders, recurring events, and dashboard widgets",
+    "version": "1.0.0",
+    "tab": {
+        "label": "Calendar",
+        "icon": "📅",
+        "order": 25,
+        "enabled": true
+    },
+    "frontendComponent": "Calendar",
+    "widgets": [
+        {
+            "id": "calendar-compact",
+            "displayName": "Today's Events",
+            "description": "Quick view of event count for today",
+            "icon": "📅",
+            "component": "widgets/CalendarCompactWidget",
+            "preview": "Shows total event count for today",
+            "snapSizes": {
+                "default": "3x2",
+                "supported": [
+                    "3x2",
+                    "4x2"
+                ],
+                "min": "3x2",
+                "max": "4x3"
+            },
+            "defaultSize": {
+                "w": 3,
+                "h": 2,
+                "minW": 3,
+                "minH": 2
+            },
+            "category": "productivity"
+        },
+        {
+            "id": "calendar-upcoming",
+            "displayName": "Upcoming Events",
+            "description": "List of next upcoming events",
+            "icon": "📅",
+            "component": "widgets/CalendarUpcomingWidget",
+            "preview": "Shows 5 most upcoming events",
+            "snapSizes": {
+                "default": "4x3",
+                "supported": [
+                    "4x3",
+                    "4x4",
+                    "6x4"
+                ],
+                "min": "4x3",
+                "max": "6x5"
+            },
+            "defaultSize": {
+                "w": 4,
+                "h": 3,
+                "minW": 4,
+                "minH": 3
+            },
+            "category": "productivity"
+        },
+        {
+            "id": "calendar-detailed",
+            "displayName": "Week Calendar",
+            "description": "Interactive calendar for the current week",
+            "icon": "📅",
+            "component": "widgets/CalendarDetailedWidget",
+            "preview": "Week view with event indicators",
+            "snapSizes": {
+                "default": "6x4",
+                "supported": [
+                    "6x4",
+                    "6x5",
+                    "8x4"
+                ],
+                "min": "6x4",
+                "max": "8x6"
+            },
+            "defaultSize": {
+                "w": 6,
+                "h": 4,
+                "minW": 6,
+                "minH": 4
+            },
+            "category": "productivity"
+        }
+    ],
+    "category": "productivity"
+}

@@ -3,8 +3,9 @@ Service layer for database operations
 Provides clean interface for database interactions with dependency injection
 """
 from typing import List, Optional, Dict, Any
+import uuid
 from sqlalchemy.orm import Session
-from database import Task, MCPServer, PluginState, PluginOrder, SystemConfig, DashboardLayout
+from database import Task, MCPServer, PluginState, PluginOrder, SystemConfig, DashboardLayout, Suite, UserSuiteSelection
 
 
 # ==================== Task Services ====================
@@ -433,7 +434,6 @@ def create_snippet_version(db: Session, snippet):
     """Create a new version from current snippet state"""
     from database import SnippetVersion
     from datetime import datetime
-    import uuid
     
     existing_versions = get_snippet_versions(db, snippet.id)
     version_number = len(existing_versions) + 1
@@ -525,3 +525,321 @@ def get_snippets_by_tag(db: Session, tag_name: str):
     """Get all snippets with a specific tag"""
     from database import Snippet
     return db.query(Snippet).filter(Snippet.tags.contains([tag_name])).all()
+
+
+# ==================== Suite Services ====================
+
+def get_all_suites(db: Session, active_only: bool = True) -> List[Suite]:
+    """Get all available suites"""
+    query = db.query(Suite)
+    if active_only:
+        query = query.filter(Suite.is_active == True)
+    return query.order_by(Suite.display_name).all()
+
+
+def get_suite_by_name(db: Session, suite_name: str) -> Optional[Suite]:
+    """Get a specific suite by name"""
+    return db.query(Suite).filter(Suite.name == suite_name).first()
+
+
+def create_suite(db: Session, name: str, display_name: str, description: Optional[str] = None,
+                 icon: str = "📦", category: Optional[str] = None,
+                 plugins_required: Optional[List[str]] = None, plugins_recommended: Optional[List[str]] = None,
+                 plugins_optional: Optional[List[str]] = None, default_config: Optional[Dict] = None,
+                 onboarding_steps: Optional[List[Dict]] = None, theme: Optional[Dict] = None) -> Suite:
+    """Create a new suite"""
+    if plugins_required is None:
+        plugins_required = []
+    if plugins_recommended is None:
+        plugins_recommended = []
+    if plugins_optional is None:
+        plugins_optional = []
+    db_suite = Suite(
+        name=name,
+        display_name=display_name,
+        description=description,
+        icon=icon,
+        category=category,
+        plugins_required=plugins_required,
+        plugins_recommended=plugins_recommended,
+        plugins_optional=plugins_optional,
+        default_config=default_config,
+        onboarding_steps=onboarding_steps,
+        theme=theme,
+        is_active=True
+    )
+    db.add(db_suite)
+    db.commit()
+    db.refresh(db_suite)
+    return db_suite
+
+
+def update_suite(db: Session, suite_name: str, **kwargs) -> Optional[Suite]:
+    """Update a suite"""
+    db_suite = get_suite_by_name(db, suite_name)
+    if not db_suite:
+        return None
+
+    for key, value in kwargs.items():
+        if hasattr(db_suite, key) and value is not None:
+            setattr(db_suite, key, value)
+
+    db.commit()
+    db.refresh(db_suite)
+    return db_suite
+
+
+def delete_suite(db: Session, suite_name: str) -> bool:
+    """Delete a suite (soft delete by setting is_active to False)"""
+    db_suite = get_suite_by_name(db, suite_name)
+    if not db_suite:
+        return False
+
+    db_suite.is_active = False
+    db.commit()
+    return True
+
+
+def hard_delete_suite(db: Session, suite_name: str) -> bool:
+    """Permanently delete a suite"""
+    db_suite = get_suite_by_name(db, suite_name)
+    if not db_suite:
+        return False
+
+    # Also delete any user selections for this suite
+    db.query(UserSuiteSelection).filter(UserSuiteSelection.suite_name == suite_name).delete()
+    db.delete(db_suite)
+    db.commit()
+    return True
+
+
+# ==================== User Suite Selection Services ====================
+
+def get_user_active_suite(db: Session, user_id: str = "default") -> Optional[UserSuiteSelection]:
+    """Get the user's currently active suite selection"""
+    return db.query(UserSuiteSelection).filter(
+        UserSuiteSelection.user_id == user_id,
+        UserSuiteSelection.is_active == True
+    ).first()
+
+
+def get_user_suite_history(db: Session, user_id: str = "default") -> List[UserSuiteSelection]:
+    """Get all suite selections for a user (history)"""
+    return db.query(UserSuiteSelection).filter(
+        UserSuiteSelection.user_id == user_id
+    ).order_by(UserSuiteSelection.activated_at.desc()).all()
+
+
+def activate_suite_for_user(db: Session, suite_name: str, enabled_plugins: List[str],
+                            user_id: str = "default", onboarding_data: Optional[Dict] = None) -> UserSuiteSelection:
+    """Activate a suite for a user, deactivating any previous active suite"""
+    # Verify suite exists
+    suite = get_suite_by_name(db, suite_name)
+    if not suite:
+        raise ValueError(f"Suite '{suite_name}' not found")
+
+    # Validate required plugins are included
+    missing_required = set(suite.plugins_required or []) - set(enabled_plugins)
+    if missing_required:
+        raise ValueError(f"Missing required plugins: {list(missing_required)}")
+
+    # Deactivate current active suite
+    current_active = get_user_active_suite(db, user_id)
+    if current_active:
+        current_active.is_active = False
+
+    # Create new active selection
+    selection = UserSuiteSelection(
+        id=str(uuid.uuid4()),
+        user_id=user_id,
+        suite_name=suite_name,
+        enabled_plugins=enabled_plugins,
+        onboarding_data=onboarding_data,
+        is_active=True
+    )
+    db.add(selection)
+
+    # Update plugin states based on selection
+    _sync_plugin_states_with_suite(db, enabled_plugins, suite)
+
+    db.commit()
+    db.refresh(selection)
+    return selection
+
+
+def update_user_suite_plugins(db: Session, user_id: str, enabled_plugins: List[str]) -> Optional[UserSuiteSelection]:
+    """Update enabled plugins for user's active suite"""
+    selection = get_user_active_suite(db, user_id)
+    if not selection:
+        return None
+
+    # Verify required plugins are still included
+    suite = get_suite_by_name(db, selection.suite_name)
+    if suite:
+        missing_required = set(suite.plugins_required or []) - set(enabled_plugins)
+        if missing_required:
+            raise ValueError(f"Cannot disable required plugins: {list(missing_required)}")
+
+    selection.enabled_plugins = enabled_plugins
+
+    # Sync plugin states
+    if suite:
+        _sync_plugin_states_with_suite(db, enabled_plugins, suite)
+
+    db.commit()
+    db.refresh(selection)
+    return selection
+
+
+def deactivate_user_suite(db: Session, user_id: str = "default") -> bool:
+    """Deactivate the user's current suite (return to no-suite mode)"""
+    selection = get_user_active_suite(db, user_id)
+    if not selection:
+        return False
+
+    # Restore plugin states - disable non-core plugins that were enabled by the suite
+    suite = get_suite_by_name(db, selection.suite_name)
+    if suite:
+        all_suite_plugins = set(
+            (suite.plugins_required or []) +
+            (suite.plugins_recommended or []) +
+            (suite.plugins_optional or [])
+        )
+        # Disable plugins that were part of the suite (except core plugins)
+        for plugin_name in all_suite_plugins:
+            plugin_state = get_plugin_state(db, plugin_name)
+            if plugin_state and not plugin_state.is_core:
+                plugin_state.enabled = False
+
+    selection.is_active = False
+    db.commit()
+    return True
+
+
+def _sync_plugin_states_with_suite(db: Session, enabled_plugins: List[str], suite: Suite):
+    """Sync plugin enabled states based on suite selection"""
+    all_suite_plugins = set(
+        (suite.plugins_required or []) +
+        (suite.plugins_recommended or []) +
+        (suite.plugins_optional or [])
+    )
+
+    for plugin_name in all_suite_plugins:
+        is_enabled = plugin_name in enabled_plugins
+        is_required = plugin_name in (suite.plugins_required or [])
+        set_plugin_enabled(db, plugin_name, is_enabled, is_core=is_required)
+
+
+def get_suite_with_user_selection(db: Session, suite_name: str, user_id: str = "default") -> Optional[Dict]:
+    """Get suite details along with user's selection status"""
+    suite = get_suite_by_name(db, suite_name)
+    if not suite:
+        return None
+
+    user_selection = db.query(UserSuiteSelection).filter(
+        UserSuiteSelection.user_id == user_id,
+        UserSuiteSelection.suite_name == suite_name,
+        UserSuiteSelection.is_active == True
+    ).first()
+
+    return {
+        "suite": suite,
+        "is_selected": user_selection is not None,
+        "enabled_plugins": user_selection.enabled_plugins if user_selection else [],
+        "onboarding_data": user_selection.onboarding_data if user_selection else None
+    }
+
+
+def seed_default_suites(db: Session):
+    """Seed default suite definitions if they don't exist"""
+    default_suites = [
+        {
+            "name": "job-seeker",
+            "display_name": "Job Seeker Assistant",
+            "description": "Land your dream job with resume tools, application tracking, and interview preparation",
+            "icon": "💼",
+            "category": "career",
+            "plugins_required": ["tasks"],
+            "plugins_recommended": ["pomodoro", "snippet-manager"],
+            "plugins_optional": ["notification-center"],
+            "default_config": {
+                "ai_persona": "career-coach",
+                "dashboard_widgets": ["tasks-overview", "upcoming-deadlines", "weekly-goals"]
+            }
+        },
+        {
+            "name": "property-finder",
+            "display_name": "Home Buyer Assistant",
+            "description": "Find your perfect home with property tracking, mortgage calculations, and area research",
+            "icon": "🏠",
+            "category": "lifestyle",
+            "plugins_required": ["tasks"],
+            "plugins_recommended": ["notification-center"],
+            "plugins_optional": ["snippet-manager"],
+            "default_config": {
+                "ai_persona": "real-estate-advisor",
+                "dashboard_widgets": ["property-watchlist", "mortgage-calculator", "neighborhood-stats"]
+            }
+        },
+        {
+            "name": "parent-educator",
+            "display_name": "Parent & Teacher Helper",
+            "description": "Support your child's education with lesson planning, progress tracking, and learning resources",
+            "icon": "📚",
+            "category": "education",
+            "plugins_required": ["tasks"],
+            "plugins_recommended": ["pomodoro"],
+            "plugins_optional": ["notification-center", "snippet-manager"],
+            "default_config": {
+                "ai_persona": "education-assistant",
+                "dashboard_widgets": ["learning-goals", "weekly-schedule", "achievement-tracker"]
+            }
+        },
+        {
+            "name": "habit-trainer",
+            "display_name": "Personal Habit Coach",
+            "description": "Build lasting habits with streak tracking, daily journaling, and goal management",
+            "icon": "🎯",
+            "category": "productivity",
+            "plugins_required": ["tasks", "pomodoro"],
+            "plugins_recommended": ["notification-center"],
+            "plugins_optional": ["snippet-manager"],
+            "default_config": {
+                "ai_persona": "habit-coach",
+                "dashboard_widgets": ["habit-streaks", "daily-journal", "weekly-review"]
+            }
+        },
+        {
+            "name": "wedding-prep",
+            "display_name": "Wedding Planner",
+            "description": "Plan your perfect wedding with budget tracking, vendor management, and timeline organization",
+            "icon": "💒",
+            "category": "lifestyle",
+            "plugins_required": ["tasks"],
+            "plugins_recommended": ["notification-center"],
+            "plugins_optional": ["snippet-manager", "pomodoro"],
+            "default_config": {
+                "ai_persona": "wedding-planner",
+                "dashboard_widgets": ["budget-tracker", "vendor-list", "countdown-timer", "guest-rsvp"]
+            }
+        },
+        {
+            "name": "developer",
+            "display_name": "Developer Workspace",
+            "description": "Boost your coding productivity with code snippets, task management, and focus tools",
+            "icon": "💻",
+            "category": "development",
+            "plugins_required": ["tasks", "snippet-manager"],
+            "plugins_recommended": ["pomodoro", "jira"],
+            "plugins_optional": ["notification-center", "rss-reader"],
+            "default_config": {
+                "ai_persona": "coding-assistant",
+                "dashboard_widgets": ["active-tasks", "recent-snippets", "pomodoro-timer"]
+            }
+        }
+    ]
+
+    for suite_data in default_suites:
+        existing = get_suite_by_name(db, suite_data["name"])
+        if not existing:
+            create_suite(db, **suite_data)

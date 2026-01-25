@@ -2,6 +2,7 @@ import os
 import importlib.util
 import json
 from pathlib import Path
+from contextlib import asynccontextmanager
 from fastapi import FastAPI, UploadFile, File, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -31,7 +32,23 @@ from logger import (
 # Validate configuration at startup
 validate_startup_config()
 
-app = FastAPI(title="SuperDashboard API")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Startup and shutdown event handler"""
+    # Startup: Initialize database and seed default data
+    from database import SessionLocal
+    init_db()
+    db_session = SessionLocal()
+    try:
+        services.seed_default_suites(db_session)
+    finally:
+        db_session.close()
+
+    yield  # Application runs here
+
+
+app = FastAPI(title="SuperDashboard API", lifespan=lifespan)
 
 # Configure CORS using validated config
 app.add_middleware(
@@ -89,8 +106,70 @@ class ChatRequest(BaseModel):
     messages: List[ChatMessage]
     model: Optional[str] = "gpt-4"  # Default to GPT-4
 
-# Initialize database on startup
-init_db()
+
+# ==================== Suite Pydantic Models ====================
+
+class SuitePlugins(BaseModel):
+    required: List[str] = []
+    recommended: List[str] = []
+    optional: List[str] = []
+
+
+class SuiteCreate(BaseModel):
+    name: str
+    display_name: str
+    description: Optional[str] = None
+    icon: str = "📦"
+    category: Optional[str] = None
+    plugins: SuitePlugins
+    default_config: Optional[Dict[str, Any]] = None
+    onboarding_steps: Optional[List[Dict[str, Any]]] = None
+    theme: Optional[Dict[str, Any]] = None
+
+
+class SuiteUpdate(BaseModel):
+    display_name: Optional[str] = None
+    description: Optional[str] = None
+    icon: Optional[str] = None
+    category: Optional[str] = None
+    plugins: Optional[SuitePlugins] = None
+    default_config: Optional[Dict[str, Any]] = None
+    onboarding_steps: Optional[List[Dict[str, Any]]] = None
+    theme: Optional[Dict[str, Any]] = None
+
+
+class SuiteResponse(BaseModel):
+    name: str
+    display_name: str
+    description: Optional[str] = None
+    icon: str
+    category: Optional[str] = None
+    plugins: SuitePlugins
+    default_config: Optional[Dict[str, Any]] = None
+    onboarding_steps: Optional[List[Dict[str, Any]]] = None
+    theme: Optional[Dict[str, Any]] = None
+    is_active: bool = True
+
+
+class ActivateSuiteRequest(BaseModel):
+    suite_name: str
+    enabled_plugins: List[str]
+    onboarding_data: Optional[Dict[str, Any]] = None
+
+
+class UpdateSuitePluginsRequest(BaseModel):
+    enabled_plugins: List[str]
+
+
+class UserSuiteSelectionResponse(BaseModel):
+    id: str
+    user_id: str
+    suite_name: str
+    enabled_plugins: List[str]
+    onboarding_data: Optional[Dict[str, Any]] = None
+    is_active: bool
+    activated_at: str
+
 
 # ==================== Helper Functions ====================
 
@@ -701,6 +780,249 @@ async def remove_mcp_server(server_name: str, db: Session = Depends(get_db)):
     return {
         "message": f"MCP server '{server_name}' removed successfully"
     }
+
+
+# ==================== Suite Endpoints ====================
+
+@app.get("/suites")
+async def list_suites(db: Session = Depends(get_db)):
+    """List all available suites"""
+    db_suites = services.get_all_suites(db)
+    return {
+        "suites": [
+            {
+                "name": s.name,
+                "displayName": s.display_name,
+                "description": s.description,
+                "icon": s.icon,
+                "category": s.category,
+                "plugins": {
+                    "required": s.plugins_required or [],
+                    "recommended": s.plugins_recommended or [],
+                    "optional": s.plugins_optional or []
+                },
+                "defaultConfig": s.default_config,
+                "onboardingSteps": s.onboarding_steps,
+                "theme": s.theme
+            } for s in db_suites
+        ]
+    }
+
+
+@app.get("/suites/{suite_name}")
+async def get_suite(suite_name: str, db: Session = Depends(get_db)):
+    """Get a specific suite by name"""
+    db_suite = services.get_suite_by_name(db, suite_name)
+    if not db_suite:
+        raise HTTPException(status_code=404, detail=f"Suite '{suite_name}' not found")
+
+    return {
+        "name": db_suite.name,
+        "displayName": db_suite.display_name,
+        "description": db_suite.description,
+        "icon": db_suite.icon,
+        "category": db_suite.category,
+        "plugins": {
+            "required": db_suite.plugins_required or [],
+            "recommended": db_suite.plugins_recommended or [],
+            "optional": db_suite.plugins_optional or []
+        },
+        "defaultConfig": db_suite.default_config,
+        "onboardingSteps": db_suite.onboarding_steps,
+        "theme": db_suite.theme
+    }
+
+
+@app.post("/suites")
+async def create_suite(suite: SuiteCreate, db: Session = Depends(get_db)):
+    """Create a new suite"""
+    # Check if suite already exists
+    existing = services.get_suite_by_name(db, suite.name)
+    if existing:
+        raise HTTPException(status_code=400, detail=f"Suite '{suite.name}' already exists")
+
+    try:
+        db_suite = services.create_suite(
+            db=db,
+            name=suite.name,
+            display_name=suite.display_name,
+            description=suite.description,
+            icon=suite.icon,
+            category=suite.category,
+            plugins_required=suite.plugins.required,
+            plugins_recommended=suite.plugins.recommended,
+            plugins_optional=suite.plugins.optional,
+            default_config=suite.default_config,
+            onboarding_steps=suite.onboarding_steps,
+            theme=suite.theme
+        )
+        return {
+            "message": f"Suite '{suite.name}' created successfully",
+            "suite": {
+                "name": db_suite.name,
+                "displayName": db_suite.display_name,
+                "description": db_suite.description,
+                "icon": db_suite.icon,
+                "category": db_suite.category,
+                "plugins": {
+                    "required": db_suite.plugins_required or [],
+                    "recommended": db_suite.plugins_recommended or [],
+                    "optional": db_suite.plugins_optional or []
+                }
+            }
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.patch("/suites/{suite_name}")
+async def update_suite(suite_name: str, suite: SuiteUpdate, db: Session = Depends(get_db)):
+    """Update an existing suite"""
+    update_data = {}
+    if suite.display_name is not None:
+        update_data["display_name"] = suite.display_name
+    if suite.description is not None:
+        update_data["description"] = suite.description
+    if suite.icon is not None:
+        update_data["icon"] = suite.icon
+    if suite.category is not None:
+        update_data["category"] = suite.category
+    if suite.plugins is not None:
+        update_data["plugins_required"] = suite.plugins.required
+        update_data["plugins_recommended"] = suite.plugins.recommended
+        update_data["plugins_optional"] = suite.plugins.optional
+    if suite.default_config is not None:
+        update_data["default_config"] = suite.default_config
+    if suite.onboarding_steps is not None:
+        update_data["onboarding_steps"] = suite.onboarding_steps
+    if suite.theme is not None:
+        update_data["theme"] = suite.theme
+
+    db_suite = services.update_suite(db, suite_name, **update_data)
+    if not db_suite:
+        raise HTTPException(status_code=404, detail=f"Suite '{suite_name}' not found")
+
+    return {
+        "message": f"Suite '{suite_name}' updated successfully",
+        "suite": {
+            "name": db_suite.name,
+            "displayName": db_suite.display_name,
+            "description": db_suite.description,
+            "icon": db_suite.icon,
+            "category": db_suite.category
+        }
+    }
+
+
+@app.delete("/suites/{suite_name}")
+async def delete_suite(suite_name: str, db: Session = Depends(get_db)):
+    """Delete a suite (soft delete)"""
+    success = services.delete_suite(db, suite_name)
+    if not success:
+        raise HTTPException(status_code=404, detail=f"Suite '{suite_name}' not found")
+
+    return {"message": f"Suite '{suite_name}' deleted successfully"}
+
+
+# ==================== User Suite Selection Endpoints ====================
+
+@app.get("/suites/user/active")
+async def get_user_active_suite(user_id: str = "default", db: Session = Depends(get_db)):
+    """Get the user's currently active suite selection"""
+    selection = services.get_user_active_suite(db, user_id)
+    if not selection:
+        return {"active_suite": None}
+
+    # Get suite details
+    suite = services.get_suite_by_name(db, selection.suite_name)
+
+    return {
+        "active_suite": {
+            "id": selection.id,
+            "suite_name": selection.suite_name,
+            "suite_display_name": suite.display_name if suite else selection.suite_name,
+            "suite_icon": suite.icon if suite else "📦",
+            "enabled_plugins": selection.enabled_plugins,
+            "onboarding_data": selection.onboarding_data,
+            "activated_at": selection.activated_at.isoformat() if selection.activated_at else None
+        }
+    }
+
+
+@app.post("/suites/user/activate")
+async def activate_suite(request: ActivateSuiteRequest, user_id: str = "default", db: Session = Depends(get_db)):
+    """Activate a suite for the user"""
+    try:
+        selection = services.activate_suite_for_user(
+            db=db,
+            suite_name=request.suite_name,
+            enabled_plugins=request.enabled_plugins,
+            user_id=user_id,
+            onboarding_data=request.onboarding_data
+        )
+
+        suite = services.get_suite_by_name(db, request.suite_name)
+
+        return {
+            "message": f"Suite '{suite.display_name if suite else request.suite_name}' activated successfully",
+            "selection": {
+                "id": selection.id,
+                "suite_name": selection.suite_name,
+                "enabled_plugins": selection.enabled_plugins,
+                "activated_at": selection.activated_at.isoformat() if selection.activated_at else None
+            }
+        }
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.patch("/suites/user/plugins")
+async def update_user_suite_plugins(request: UpdateSuitePluginsRequest, user_id: str = "default", db: Session = Depends(get_db)):
+    """Update enabled plugins for user's active suite"""
+    try:
+        selection = services.update_user_suite_plugins(db, user_id, request.enabled_plugins)
+        if not selection:
+            raise HTTPException(status_code=404, detail="No active suite found for user")
+
+        return {
+            "message": "Enabled plugins updated successfully",
+            "enabled_plugins": selection.enabled_plugins
+        }
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/suites/user/deactivate")
+async def deactivate_user_suite(user_id: str = "default", db: Session = Depends(get_db)):
+    """Deactivate the user's current suite"""
+    success = services.deactivate_user_suite(db, user_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="No active suite found for user")
+
+    return {"message": "Suite deactivated successfully"}
+
+
+@app.get("/suites/user/history")
+async def get_user_suite_history(user_id: str = "default", db: Session = Depends(get_db)):
+    """Get user's suite selection history"""
+    history = services.get_user_suite_history(db, user_id)
+
+    return {
+        "history": [
+            {
+                "id": h.id,
+                "suite_name": h.suite_name,
+                "enabled_plugins": h.enabled_plugins,
+                "is_active": h.is_active,
+                "activated_at": h.activated_at.isoformat() if h.activated_at else None
+            } for h in history
+        ]
+    }
+
 
 # ==================== Server Startup ====================
 
