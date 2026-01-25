@@ -4,7 +4,7 @@ REST API endpoints for calendar event management
 """
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from typing import List, Optional
+from typing import Optional
 from datetime import datetime, timedelta
 from pydantic import BaseModel
 import uuid
