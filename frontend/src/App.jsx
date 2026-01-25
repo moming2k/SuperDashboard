@@ -1,5 +1,6 @@
 import React, { useState, useEffect, Suspense, lazy } from 'react';
 import Toast from './components/Toast';
+import SuiteSelector, { SuiteManager } from './components/SuiteSelector';
 import config, { API_BASE } from './config';
 import {
   DndContext,
@@ -82,6 +83,140 @@ const PluginComponent = ({ plugin, props }) => {
         <Component {...props} />
       </Suspense>
     </ErrorBoundary>
+  );
+};
+
+const SuitesView = ({ activeSuite, onSelectSuite, onDeactivate }) => {
+  const [suites, setSuites] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchSuites = async () => {
+      try {
+        const res = await fetch(`${API_BASE}/suites`);
+        if (res.ok) {
+          const data = await res.json();
+          setSuites(data.suites || []);
+        }
+        setLoading(false);
+      } catch (e) {
+        console.error("Failed to fetch suites", e);
+        setLoading(false);
+      }
+    };
+    fetchSuites();
+  }, []);
+
+  if (loading) {
+    return (
+      <div className="animate-fade">
+        <h1 className="text-3xl font-bold mb-8">Suites</h1>
+        <p className="text-text-muted">Loading suites...</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="animate-fade">
+      <div className="flex items-center justify-between mb-8">
+        <div>
+          <h1 className="text-3xl font-bold">Suites</h1>
+          <p className="text-text-muted mt-1">
+            Curated plugin collections for specific use cases
+          </p>
+        </div>
+        <button
+          onClick={onSelectSuite}
+          className="bg-primary text-white px-6 py-3 rounded-xl font-semibold
+                     transition-all duration-300 hover:bg-primary/80 hover:-translate-y-0.5"
+        >
+          {activeSuite ? 'Change Suite' : 'Choose a Suite'}
+        </button>
+      </div>
+
+      {/* Active Suite Card */}
+      {activeSuite && (
+        <div className="mb-8">
+          <h2 className="text-xl font-semibold mb-4 text-text-muted">Active Suite</h2>
+          <div className="bg-primary/10 border border-primary/30 rounded-2xl p-6">
+            <div className="flex items-center gap-4 mb-4">
+              <span className="text-5xl">{activeSuite.suite_icon}</span>
+              <div>
+                <h3 className="text-2xl font-bold text-text-main">
+                  {activeSuite.suite_display_name}
+                </h3>
+                <p className="text-text-muted">
+                  {activeSuite.enabled_plugins?.length || 0} plugins enabled
+                </p>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap gap-2 mb-4">
+              {activeSuite.enabled_plugins?.map(plugin => (
+                <span
+                  key={plugin}
+                  className="px-3 py-1 bg-glass rounded-full text-sm text-text-main capitalize"
+                >
+                  {plugin.replace(/-/g, ' ')}
+                </span>
+              ))}
+            </div>
+
+            <button
+              onClick={onDeactivate}
+              className="text-sm text-red-400 hover:text-red-300 transition-colors"
+            >
+              Deactivate Suite
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Available Suites Grid */}
+      <h2 className="text-xl font-semibold mb-4 text-text-muted">Available Suites</h2>
+      {suites.length === 0 ? (
+        <p className="text-text-muted">No suites available.</p>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {suites.map(suite => (
+            <div
+              key={suite.name}
+              className={`bg-glass backdrop-blur-xl border rounded-2xl p-6
+                         transition-all duration-300 hover:scale-[1.02]
+                         ${activeSuite?.suite_name === suite.name
+                           ? 'border-primary bg-primary/5'
+                           : 'border-glass-border hover:border-primary/50'}`}
+            >
+              <div className="flex items-start justify-between mb-4">
+                <span className="text-4xl">{suite.icon}</span>
+                {activeSuite?.suite_name === suite.name && (
+                  <span className="text-xs bg-primary text-white px-2 py-1 rounded-full">
+                    Active
+                  </span>
+                )}
+              </div>
+
+              <h3 className="text-lg font-semibold text-text-main mb-2">
+                {suite.displayName}
+              </h3>
+
+              <p className="text-text-muted text-sm mb-4 line-clamp-2">
+                {suite.description}
+              </p>
+
+              <div className="flex flex-wrap gap-2 text-xs">
+                <span className="bg-primary/20 text-primary px-2 py-1 rounded-full">
+                  {suite.plugins?.required?.length || 0} required
+                </span>
+                <span className="bg-accent/20 text-accent px-2 py-1 rounded-full">
+                  {suite.plugins?.recommended?.length || 0} recommended
+                </span>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
   );
 };
 
@@ -197,6 +332,11 @@ function App() {
   const [pluginConfig, setPluginConfig] = useState({});
   const [toast, setToast] = useState(null);
 
+  // Suite state
+  const [activeSuite, setActiveSuite] = useState(null);
+  const [showSuiteSelector, setShowSuiteSelector] = useState(false);
+  const [suiteLoading, setSuiteLoading] = useState(true);
+
   // Custom setActiveTab that also updates URL
   const navigateToTab = (tabId) => {
     setActiveTab(tabId);
@@ -212,6 +352,51 @@ function App() {
     } catch (e) {
       console.error("Failed to fetch plugins", e);
       setLoading(false);
+    }
+  };
+
+  const fetchActiveSuite = async () => {
+    try {
+      setSuiteLoading(true);
+      const res = await fetch(`${API_BASE}/suites/user/active`);
+      if (res.ok) {
+        const data = await res.json();
+        setActiveSuite(data.active_suite);
+      }
+      setSuiteLoading(false);
+    } catch (e) {
+      console.error("Failed to fetch active suite", e);
+      setSuiteLoading(false);
+    }
+  };
+
+  const handleSuiteActivated = (suite, enabledPlugins, selection) => {
+    setActiveSuite({
+      suite_name: suite.name,
+      suite_display_name: suite.displayName,
+      suite_icon: suite.icon,
+      enabled_plugins: enabledPlugins,
+      ...selection
+    });
+    setShowSuiteSelector(false);
+    setToast({ message: `${suite.displayName} activated successfully!`, type: 'success' });
+    // Refresh plugins to reflect new state
+    fetchPlugins();
+  };
+
+  const handleDeactivateSuite = async () => {
+    try {
+      const res = await fetch(`${API_BASE}/suites/user/deactivate`, {
+        method: 'POST'
+      });
+      if (res.ok) {
+        setActiveSuite(null);
+        setToast({ message: 'Suite deactivated', type: 'success' });
+        fetchPlugins();
+      }
+    } catch (e) {
+      console.error("Failed to deactivate suite", e);
+      setToast({ message: 'Failed to deactivate suite', type: 'error' });
     }
   };
 
@@ -332,6 +517,7 @@ function App() {
 
   useEffect(() => {
     fetchPlugins();
+    fetchActiveSuite();
 
     // Listen for navigation events from plugins
     const handleNavigate = (e) => {
@@ -415,7 +601,7 @@ function App() {
   // Get command palette plugin (if enabled)
   const commandPalettePlugin = plugins.find(p => p.name === 'command-palette' && p.enabled);
 
-  if (loading) {
+  if (loading || suiteLoading) {
     return (
       <div className="flex h-screen bg-bg-dark font-outfit text-text-main items-center justify-center">
         <div className="text-center">
@@ -428,13 +614,32 @@ function App() {
     );
   }
 
+  // Show suite selector if user wants to change suite or on first visit
+  if (showSuiteSelector) {
+    return (
+      <SuiteSelector
+        onSuiteActivated={handleSuiteActivated}
+        onSkip={() => setShowSuiteSelector(false)}
+        activeSuite={activeSuite}
+      />
+    );
+  }
+
   return (
     <div className="flex h-screen bg-bg-dark font-outfit text-text-main">
       {/* Sidebar */}
       <div className="w-[260px] bg-glass backdrop-blur-xl border-r border-glass-border p-8 flex flex-col gap-8">
-        <div className="text-2xl font-bold bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent mb-8">
+        <div className="text-2xl font-bold bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent mb-4">
           SuperDashboard
         </div>
+
+        {/* Active Suite Indicator */}
+        <SuiteManager
+          activeSuite={activeSuite}
+          onChangeSuite={() => setShowSuiteSelector(true)}
+          onDeactivate={handleDeactivateSuite}
+        />
+
         <nav className="flex flex-col gap-2">
           {visibleTabs.map((tab) => (
             <div
@@ -450,8 +655,17 @@ function App() {
           ))}
         </nav>
 
-        {/* Plugin Registry Tab */}
-        <div className="mt-auto">
+        {/* Settings Section */}
+        <div className="mt-auto flex flex-col gap-2">
+          <div
+            className={`flex items-center gap-3 p-3 px-4 rounded-xl cursor-pointer transition-all duration-300 hover:bg-glass hover:text-text-main hover:translate-x-1 ${activeTab === 'suites'
+              ? 'bg-glass text-text-main translate-x-1'
+              : 'text-text-muted'
+              }`}
+            onClick={() => navigateToTab('suites')}
+          >
+            📦 Suites
+          </div>
           <div
             className={`flex items-center gap-3 p-3 px-4 rounded-xl cursor-pointer transition-all duration-300 hover:bg-glass hover:text-text-main hover:translate-x-1 ${activeTab === 'plugins'
               ? 'bg-glass text-text-main translate-x-1'
@@ -466,7 +680,13 @@ function App() {
 
       {/* Main Content */}
       <div className="flex-1 p-8 overflow-y-auto">
-        {activeTab === 'plugins' ? (
+        {activeTab === 'suites' ? (
+          <SuitesView
+            activeSuite={activeSuite}
+            onSelectSuite={() => setShowSuiteSelector(true)}
+            onDeactivate={handleDeactivateSuite}
+          />
+        ) : activeTab === 'plugins' ? (
           <div className="animate-fade">
             <div className="flex items-center justify-between mb-8">
               <h1 className="text-3xl font-bold">Plugin Registry</h1>

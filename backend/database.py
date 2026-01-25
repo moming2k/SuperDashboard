@@ -140,3 +140,37 @@ class Tag(Base):
     name = Column(String, primary_key=True, index=True)
     count = Column(Integer, nullable=False, default=0)
     color = Column(String, nullable=True)
+
+
+class Suite(Base):
+    """Model for storing plugin suite definitions"""
+    __tablename__ = "suites"
+
+    name = Column(String, primary_key=True, index=True)
+    display_name = Column(String, nullable=False)
+    description = Column(Text, nullable=True)
+    icon = Column(String, nullable=False, default="📦")
+    category = Column(String, nullable=True)
+    plugins_required = Column(JSON, nullable=False, default=list)  # List of required plugin names
+    plugins_recommended = Column(JSON, nullable=False, default=list)  # List of recommended plugin names
+    plugins_optional = Column(JSON, nullable=False, default=list)  # List of optional plugin names
+    default_config = Column(JSON, nullable=True)  # Default dashboard/AI config for suite
+    onboarding_steps = Column(JSON, nullable=True)  # Onboarding wizard steps
+    theme = Column(JSON, nullable=True)  # Theme customization for suite
+    is_active = Column(Boolean, nullable=False, default=True)  # Whether suite is available
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class UserSuiteSelection(Base):
+    """Model for storing user's active suite selection"""
+    __tablename__ = "user_suite_selections"
+
+    id = Column(String, primary_key=True, index=True)
+    user_id = Column(String, nullable=False, index=True, default="default")  # Support multi-user
+    suite_name = Column(String, nullable=False, index=True)  # Reference to suite
+    enabled_plugins = Column(JSON, nullable=False, default=list)  # List of enabled plugin names
+    onboarding_data = Column(JSON, nullable=True)  # User's onboarding responses
+    is_active = Column(Boolean, nullable=False, default=True)  # Current active suite for user
+    activated_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
