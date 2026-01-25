@@ -23,6 +23,8 @@ function SnippetManager() {
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [showVersionHistory, setShowVersionHistory] = useState(false);
   const [versions, setVersions] = useState([]);
+  const [editingSnippet, setEditingSnippet] = useState(null);
+  const [copyFeedback, setCopyFeedback] = useState(null);
 
   // Filters
   const [filters, setFilters] = useState({
@@ -58,6 +60,7 @@ function SnippetManager() {
       // Ctrl/Cmd + B: New snippet
       if ((e.ctrlKey || e.metaKey) && e.key === 'b') {
         e.preventDefault();
+        resetForm();
         setShowCreateForm(true);
         setActiveTab('library');
       }
@@ -211,14 +214,54 @@ function SnippetManager() {
     }
   };
 
-  const copyToClipboard = async (code, snippetId) => {
+  const copyToClipboard = async (code, snippetId, e) => {
+    if (e) {
+      e.stopPropagation();
+    }
     try {
       await navigator.clipboard.writeText(code);
       await incrementUseCount(snippetId);
-      // Show toast or notification
-      alert('Copied to clipboard!');
+      setCopyFeedback(snippetId);
+      setTimeout(() => setCopyFeedback(null), 2000);
     } catch (error) {
       console.error('Failed to copy to clipboard:', error);
+    }
+  };
+
+  const openEditForm = (snippet) => {
+    setFormData({
+      title: snippet.title,
+      description: snippet.description || '',
+      code: snippet.code,
+      language: snippet.language,
+      visibility: snippet.visibility,
+      tags: snippet.tags || [],
+      favorite: snippet.favorite
+    });
+    setEditingSnippet(snippet);
+    setShowCreateForm(true);
+    setSelectedSnippet(null);
+  };
+
+  const saveSnippet = async () => {
+    try {
+      if (editingSnippet) {
+        await updateSnippet(editingSnippet.id, formData);
+      } else {
+        await fetch(`${API_BASE}/plugins/snippet-manager/snippets`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(formData)
+        });
+      }
+      setShowCreateForm(false);
+      setEditingSnippet(null);
+      resetForm();
+      fetchSnippets();
+      fetchTags();
+      fetchStats();
+    } catch (error) {
+      console.error('Failed to save snippet:', error);
     }
   };
 
@@ -245,6 +288,7 @@ function SnippetManager() {
       favorite: false
     });
     setTagInput('');
+    setEditingSnippet(null);
   };
 
   const addTag = () => {
@@ -292,7 +336,10 @@ function SnippetManager() {
         </div>
         <div className="flex gap-2">
           <button
-            onClick={() => setShowCreateForm(true)}
+            onClick={() => {
+              resetForm();
+              setShowCreateForm(true);
+            }}
             className="bg-primary text-white px-6 py-3 rounded-xl font-semibold hover:bg-primary-hover transition-all"
           >
             + New Snippet
@@ -402,7 +449,10 @@ function SnippetManager() {
         <div className="bg-glass backdrop-blur-xl border border-glass-border rounded-2xl p-12 text-center">
           <p className="text-text-muted text-lg mb-4">No snippets found</p>
           <button
-            onClick={() => setShowCreateForm(true)}
+            onClick={() => {
+              resetForm();
+              setShowCreateForm(true);
+            }}
             className="bg-primary text-white px-6 py-3 rounded-xl font-semibold hover:bg-primary-hover transition-all"
           >
             Create Your First Snippet
@@ -424,9 +474,32 @@ function SnippetManager() {
                     <span className="text-xs text-text-muted">{snippet.language}</span>
                   </div>
                 </div>
-                <div className="flex gap-1">
-                  {snippet.favorite && <span className="text-lg">⭐</span>}
-                  {snippet.visibility === 'team' && <span className="text-lg">👥</span>}
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={(e) => copyToClipboard(snippet.code, snippet.id, e)}
+                    className={`p-2 rounded-lg transition-all ${
+                      copyFeedback === snippet.id
+                        ? 'bg-green-500 text-white'
+                        : 'bg-bg-dark hover:bg-primary hover:text-white'
+                    }`}
+                    title="Copy to clipboard"
+                  >
+                    {copyFeedback === snippet.id ? '✓' : '📋'}
+                  </button>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      openEditForm(snippet);
+                    }}
+                    className="p-2 rounded-lg bg-bg-dark hover:bg-primary hover:text-white transition-all"
+                    title="Edit snippet"
+                  >
+                    ✏️
+                  </button>
+                  <div className="flex gap-1">
+                    {snippet.favorite && <span className="text-lg">⭐</span>}
+                    {snippet.visibility === 'team' && <span className="text-lg">👥</span>}
+                  </div>
                 </div>
               </div>
 
@@ -460,7 +533,9 @@ function SnippetManager() {
       {showCreateForm && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-bg-card border border-glass-border rounded-2xl p-8 max-w-3xl w-full max-h-[90vh] overflow-y-auto">
-            <h2 className="text-2xl font-bold mb-6">Create New Snippet</h2>
+            <h2 className="text-2xl font-bold mb-6">
+              {editingSnippet ? 'Edit Snippet' : 'Create New Snippet'}
+            </h2>
 
             <div className="space-y-4">
               <div>
@@ -573,10 +648,10 @@ function SnippetManager() {
 
             <div className="flex gap-2 mt-6">
               <button
-                onClick={createSnippet}
+                onClick={saveSnippet}
                 className="bg-primary text-white px-6 py-3 rounded-xl font-semibold hover:bg-primary-hover transition-all"
               >
-                Create Snippet
+                {editingSnippet ? 'Save Changes' : 'Create Snippet'}
               </button>
               <button
                 onClick={() => { setShowCreateForm(false); resetForm(); }}
@@ -649,6 +724,12 @@ function SnippetManager() {
                 className="bg-primary text-white px-4 py-2 rounded-xl hover:bg-primary-hover transition-all"
               >
                 📋 Copy Code
+              </button>
+              <button
+                onClick={() => openEditForm(selectedSnippet)}
+                className="bg-glass border border-glass-border text-text-main px-4 py-2 rounded-xl hover:border-primary transition-all"
+              >
+                ✏️ Edit
               </button>
               <button
                 onClick={() => toggleFavorite(selectedSnippet.id)}
