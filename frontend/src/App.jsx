@@ -620,7 +620,6 @@ function App() {
       <SuiteSelector
         onSuiteActivated={handleSuiteActivated}
         onSkip={() => setShowSuiteSelector(false)}
-        activeSuite={activeSuite}
       />
     );
   }

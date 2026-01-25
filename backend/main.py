@@ -2,6 +2,7 @@ import os
 import importlib.util
 import json
 from pathlib import Path
+from contextlib import asynccontextmanager
 from fastapi import FastAPI, UploadFile, File, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -31,7 +32,25 @@ from logger import (
 # Validate configuration at startup
 validate_startup_config()
 
-app = FastAPI(title="SuperDashboard API")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Startup and shutdown event handler"""
+    # Startup: Initialize database and seed default data
+    init_db()
+    db_session = next(get_db())
+    try:
+        services.seed_default_suites(db_session)
+    finally:
+        db_session.close()
+
+    yield  # Application runs here
+
+    # Shutdown: Cleanup if needed
+    pass
+
+
+app = FastAPI(title="SuperDashboard API", lifespan=lifespan)
 
 # Configure CORS using validated config
 app.add_middleware(
@@ -153,16 +172,6 @@ class UserSuiteSelectionResponse(BaseModel):
     is_active: bool
     activated_at: str
 
-
-# Initialize database on startup
-init_db()
-
-# Seed default suites
-db_session = next(get_db())
-try:
-    services.seed_default_suites(db_session)
-finally:
-    db_session.close()
 
 # ==================== Helper Functions ====================
 

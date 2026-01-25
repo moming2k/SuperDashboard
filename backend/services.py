@@ -740,7 +740,7 @@ def seed_default_suites(db: Session):
             "description": "Land your dream job with resume tools, application tracking, and interview preparation",
             "icon": "💼",
             "category": "career",
-            "plugins_required": ["task-tracker", "calendar"],
+            "plugins_required": ["tasks"],
             "plugins_recommended": ["pomodoro", "snippet-manager"],
             "plugins_optional": ["notification-center"],
             "default_config": {
@@ -754,8 +754,8 @@ def seed_default_suites(db: Session):
             "description": "Find your perfect home with property tracking, mortgage calculations, and area research",
             "icon": "🏠",
             "category": "lifestyle",
-            "plugins_required": ["task-tracker"],
-            "plugins_recommended": ["notification-center", "calendar"],
+            "plugins_required": ["tasks"],
+            "plugins_recommended": ["notification-center"],
             "plugins_optional": ["snippet-manager"],
             "default_config": {
                 "ai_persona": "real-estate-advisor",
@@ -768,8 +768,8 @@ def seed_default_suites(db: Session):
             "description": "Support your child's education with lesson planning, progress tracking, and learning resources",
             "icon": "📚",
             "category": "education",
-            "plugins_required": ["task-tracker"],
-            "plugins_recommended": ["pomodoro", "calendar"],
+            "plugins_required": ["tasks"],
+            "plugins_recommended": ["pomodoro"],
             "plugins_optional": ["notification-center", "snippet-manager"],
             "default_config": {
                 "ai_persona": "education-assistant",
@@ -782,8 +782,8 @@ def seed_default_suites(db: Session):
             "description": "Build lasting habits with streak tracking, daily journaling, and goal management",
             "icon": "🎯",
             "category": "productivity",
-            "plugins_required": ["task-tracker", "pomodoro"],
-            "plugins_recommended": ["notification-center", "calendar"],
+            "plugins_required": ["tasks", "pomodoro"],
+            "plugins_recommended": ["notification-center"],
             "plugins_optional": ["snippet-manager"],
             "default_config": {
                 "ai_persona": "habit-coach",
@@ -796,7 +796,7 @@ def seed_default_suites(db: Session):
             "description": "Plan your perfect wedding with budget tracking, vendor management, and timeline organization",
             "icon": "💒",
             "category": "lifestyle",
-            "plugins_required": ["task-tracker", "calendar"],
+            "plugins_required": ["tasks"],
             "plugins_recommended": ["notification-center"],
             "plugins_optional": ["snippet-manager", "pomodoro"],
             "default_config": {
@@ -810,7 +810,7 @@ def seed_default_suites(db: Session):
             "description": "Boost your coding productivity with code snippets, task management, and focus tools",
             "icon": "💻",
             "category": "development",
-            "plugins_required": ["task-tracker", "snippet-manager"],
+            "plugins_required": ["tasks", "snippet-manager"],
             "plugins_recommended": ["pomodoro", "jira"],
             "plugins_optional": ["notification-center", "rss-reader"],
             "default_config": {

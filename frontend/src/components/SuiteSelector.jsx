@@ -5,10 +5,10 @@ import { API_BASE } from '../config';
  * SuiteSelector Component
  * Allows users to browse, customize, and activate plugin suites
  */
-function SuiteSelector({ onSuiteActivated, onSkip, activeSuite }) {
+function SuiteSelector({ onSuiteActivated, onSkip }) {
   const [suites, setSuites] = useState([]);
   const [selectedSuite, setSelectedSuite] = useState(null);
-  const [step, setStep] = useState('browse'); // browse | customize | activating
+  const [step, setStep] = useState('browse'); // browse | customize
   const [enabledPlugins, setEnabledPlugins] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -17,6 +17,12 @@ function SuiteSelector({ onSuiteActivated, onSkip, activeSuite }) {
   useEffect(() => {
     fetchSuites();
   }, []);
+
+  // Clear error when changing steps
+  const changeStep = (newStep) => {
+    setError(null);
+    setStep(newStep);
+  };
 
   const fetchSuites = async () => {
     try {
@@ -35,12 +41,13 @@ function SuiteSelector({ onSuiteActivated, onSkip, activeSuite }) {
 
   const selectSuite = (suite) => {
     setSelectedSuite(suite);
-    // Auto-enable required and recommended plugins
+    // Auto-enable required and recommended plugins with null safety
+    const plugins = suite.plugins || {};
     setEnabledPlugins([
-      ...(suite.plugins?.required || []),
-      ...(suite.plugins?.recommended || [])
+      ...(plugins.required || []),
+      ...(plugins.recommended || [])
     ]);
-    setStep('customize');
+    changeStep('customize');
   };
 
   const togglePlugin = (pluginName, isRequired) => {
@@ -73,6 +80,9 @@ function SuiteSelector({ onSuiteActivated, onSkip, activeSuite }) {
       }
 
       const data = await response.json();
+
+      // Reset activating state before callback
+      setActivating(false);
 
       if (onSuiteActivated) {
         onSuiteActivated(selectedSuite, enabledPlugins, data.selection);
@@ -219,7 +229,7 @@ function SuiteSelector({ onSuiteActivated, onSkip, activeSuite }) {
       <div className="min-h-screen bg-bg-dark p-8">
         <div className="max-w-2xl mx-auto">
           <button
-            onClick={() => setStep('browse')}
+            onClick={() => changeStep('browse')}
             className="text-text-muted mb-6 hover:text-text-main flex items-center gap-2 transition-colors"
           >
             <span>←</span> Back to suites
@@ -303,7 +313,7 @@ function SuiteSelector({ onSuiteActivated, onSkip, activeSuite }) {
             </button>
 
             <button
-              onClick={() => setStep('browse')}
+              onClick={() => changeStep('browse')}
               disabled={activating}
               className="px-6 py-4 rounded-xl font-semibold bg-glass
                          border border-glass-border text-text-muted

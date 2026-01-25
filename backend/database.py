@@ -4,7 +4,7 @@ Handles all data persistence using PostgreSQL
 """
 import os
 from datetime import datetime
-from sqlalchemy import create_engine, Column, String, Integer, Text, Boolean, DateTime, JSON
+from sqlalchemy import create_engine, Column, String, Integer, Text, Boolean, DateTime, JSON, Index
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 from dotenv import load_dotenv
@@ -165,6 +165,9 @@ class Suite(Base):
 class UserSuiteSelection(Base):
     """Model for storing user's active suite selection"""
     __tablename__ = "user_suite_selections"
+    __table_args__ = (
+        Index('ix_user_suite_selections_user_active', 'user_id', 'is_active'),
+    )
 
     id = Column(String, primary_key=True, index=True)
     user_id = Column(String, nullable=False, index=True, default="default")  # Support multi-user
