@@ -434,7 +434,6 @@ def create_snippet_version(db: Session, snippet):
     """Create a new version from current snippet state"""
     from database import SnippetVersion
     from datetime import datetime
-    import uuid
     
     existing_versions = get_snippet_versions(db, snippet.id)
     version_number = len(existing_versions) + 1
