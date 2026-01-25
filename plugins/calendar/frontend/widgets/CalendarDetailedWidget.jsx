@@ -5,11 +5,11 @@ const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8001
 
 function CalendarDetailedWidget() {
     const [events, setEvents] = useState([]);
-    const [weekStart, setWeekStart] = useState(startOfWeek(new Date()));
+    const [weekStart] = useState(startOfWeek(new Date()));
 
     useEffect(() => {
         fetchWeekEvents();
-    }, [weekStart]);
+    }, []);
 
     const fetchWeekEvents = async () => {
         try {

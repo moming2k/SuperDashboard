@@ -6,7 +6,6 @@ const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8001
 function Calendar() {
     const [currentDate, setCurrentDate] = useState(new Date());
     const [events, setEvents] = useState([]);
-    const [selectedDate, setSelectedDate] = useState(null);
     const [showEventModal, setShowEventModal] = useState(false);
     const [selectedEvent, setSelectedEvent] = useState(null);
     const [formData, setFormData] = useState({
@@ -80,7 +79,6 @@ function Calendar() {
     };
 
     const openCreateModal = (date) => {
-        setSelectedDate(date);
         setSelectedEvent(null);
         setFormData({
             title: '',
@@ -112,7 +110,6 @@ function Calendar() {
 
     const closeModal = () => {
         setShowEventModal(false);
-        setSelectedDate(null);
         setSelectedEvent(null);
     };
 
