@@ -146,6 +146,16 @@ function SnippetManager() {
   };
 
   const createSnippet = async () => {
+    // Validate required fields
+    if (!formData.title.trim()) {
+      alert('Please enter a title for your snippet');
+      return;
+    }
+    if (!formData.code.trim()) {
+      alert('Please enter code for your snippet');
+      return;
+    }
+
     try {
       await fetch(`${API_BASE}/plugins/snippet-manager/snippets`, {
         method: 'POST',
@@ -470,8 +480,8 @@ function SnippetManager() {
                 <div className="flex items-center gap-2">
                   <span className="text-2xl">{getLanguageIcon(snippet.language)}</span>
                   <div>
-                    <h3 className="text-lg font-semibold">{snippet.title}</h3>
-                    <span className="text-xs text-text-muted">{snippet.language}</span>
+                    <h3 className="text-lg font-semibold">{snippet.title || '(Untitled)'}</h3>
+                    <span className="text-xs text-text-main">{snippet.language}</span>
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
@@ -670,7 +680,7 @@ function SnippetManager() {
           <div className="bg-bg-card border border-glass-border rounded-2xl p-8 max-w-4xl w-full max-h-[90vh] overflow-y-auto">
             <div className="flex items-start justify-between mb-6">
               <div>
-                <h2 className="text-2xl font-bold mb-2">{selectedSnippet.title}</h2>
+                <h2 className="text-2xl font-bold mb-2">{selectedSnippet.title || '(Untitled Snippet)'}</h2>
                 {selectedSnippet.description && (
                   <p className="text-text-muted">{selectedSnippet.description}</p>
                 )}
@@ -685,7 +695,7 @@ function SnippetManager() {
 
             <div className="flex items-center gap-4 mb-4">
               <span className="text-2xl">{getLanguageIcon(selectedSnippet.language)}</span>
-              <span className="px-3 py-1 bg-primary bg-opacity-20 text-primary rounded-full text-sm">
+              <span className="px-3 py-1 bg-primary text-white rounded-full text-sm">
                 {selectedSnippet.language}
               </span>
               <span className="px-3 py-1 bg-glass border border-glass-border rounded-full text-sm">
