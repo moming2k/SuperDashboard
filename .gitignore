@@ -29,6 +29,11 @@ htmlcov/
 # Plugin state (runtime data)
 plugin_state.json
 
+# SQLite database files (local development)
+*.db
+*.sqlite
+*.sqlite3
+
 # Node.js
 node_modules/
 npm-debug.log*

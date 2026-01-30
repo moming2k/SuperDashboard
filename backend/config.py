@@ -63,9 +63,9 @@ class Config:
         if not self.database_url:
             errors.append("DATABASE_URL is required")
 
-        # Validate database URL format
-        if self.database_url and not self.database_url.startswith("postgresql://"):
-            errors.append("DATABASE_URL must be a PostgreSQL connection string (postgresql://...)")
+        # Validate database URL format (allow PostgreSQL or SQLite for local development)
+        if self.database_url and not (self.database_url.startswith("postgresql://") or self.database_url.startswith("sqlite")):
+            errors.append("DATABASE_URL must be a PostgreSQL or SQLite connection string")
 
         return (len(errors) == 0, errors)
 

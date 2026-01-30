@@ -235,6 +235,9 @@ def load_plugins():
     finally:
         db.close()
 
+# Initialize database tables before loading plugins
+init_db()
+
 # Load plugins
 load_plugins()
 

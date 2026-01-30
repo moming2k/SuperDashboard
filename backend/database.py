@@ -13,10 +13,14 @@ from logger import log_db_initialized
 load_dotenv()
 
 # Get database URL from environment variable
-DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/superdashboard")
+# Supports PostgreSQL (production) or SQLite (local development)
+DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./superdashboard.db")
 
-# Create engine for PostgreSQL
-engine = create_engine(DATABASE_URL, echo=False)
+# Create engine - use appropriate settings based on database type
+if DATABASE_URL.startswith("sqlite"):
+    engine = create_engine(DATABASE_URL, echo=False, connect_args={"check_same_thread": False})
+else:
+    engine = create_engine(DATABASE_URL, echo=False)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
