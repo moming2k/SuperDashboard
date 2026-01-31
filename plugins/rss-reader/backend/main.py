@@ -48,10 +48,15 @@ article_qa_cache = {}
 
 # Scheduler for daily RSS fetching
 scheduler = AsyncIOScheduler()
+scheduler_initialized = False
 
-# Initialize scheduler on module load
+# Initialize scheduler when event loop is available
 def init_scheduler():
     """Initialize scheduler with daily RSS fetch job"""
+    global scheduler_initialized
+    if scheduler_initialized:
+        return
+    
     try:
         if not scheduler.running:
             scheduler.add_job(
@@ -61,6 +66,7 @@ def init_scheduler():
                 replace_existing=True
             )
             scheduler.start()
+            scheduler_initialized = True
             print("✅ RSS scheduler started - feeds will be fetched daily at 6 AM")
     except Exception as e:
         print(f"⚠️  Failed to start RSS scheduler: {e}")
@@ -234,8 +240,8 @@ async def fetch_all_feeds():
         db.close()
 
 
-# Start scheduler after fetch_all_feeds is defined
-init_scheduler()
+# Scheduler will be initialized lazily on first API call
+
 
 
 async def generate_article_qa(article: Article, num_questions: int = 5, language: str = "Traditional Chinese") -> List[QAPair]:
@@ -339,6 +345,9 @@ async def answer_question(article: Article, question: str) -> str:
 @router.get("/feeds")
 async def get_feeds(db: Session = Depends(get_db)):
     """Get all RSS feeds"""
+    # Initialize scheduler lazily on first API call
+    init_scheduler()
+    
     if not database_available:
         raise HTTPException(
             status_code=503,

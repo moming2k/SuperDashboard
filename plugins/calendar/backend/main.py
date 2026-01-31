@@ -10,12 +10,20 @@ from pydantic import BaseModel
 import uuid
 import sys
 import os
+import importlib.util
 
 # Add plugin directories to sys.path for imports
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../..'))
+plugin_root = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
+sys.path.insert(0, plugin_root)
 
 from shared.database import get_db, init_db
-from models import CalendarEvent
+
+# Load Calendar models using importlib to avoid conflicts
+models_path = os.path.join(os.path.dirname(__file__), 'models.py')
+spec = importlib.util.spec_from_file_location("calendar_models", models_path)
+calendar_models = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(calendar_models)
+CalendarEvent = calendar_models.CalendarEvent
 
 router = APIRouter()
 
