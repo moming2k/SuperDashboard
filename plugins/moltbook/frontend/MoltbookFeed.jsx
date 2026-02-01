@@ -12,7 +12,7 @@ function MoltbookFeed() {
   const [configured, setConfigured] = useState(false);
 
   // UI State
-  const [activeView, setActiveView] = useState('feed'); // feed, search, profile, post
+  const [activeView, setActiveView] = useState('feed'); // feed, search, profile, post, agent
   const [selectedPost, setSelectedPost] = useState(null);
   const [comments, setComments] = useState([]);
   const [sortOrder, setSortOrder] = useState('hot');
@@ -30,6 +30,11 @@ function MoltbookFeed() {
   // Comment state
   const [newComment, setNewComment] = useState('');
 
+  // Autonomous Agent state
+  const [agentState, setAgentState] = useState(null);
+  const [agentActivity, setAgentActivity] = useState([]);
+  const [agentLoading, setAgentLoading] = useState(false);
+
   // Check configuration on mount
   useEffect(() => {
     checkConfig();
@@ -41,8 +46,20 @@ function MoltbookFeed() {
       loadFeed();
       loadProfile();
       loadSubmolts();
+      loadAgentState();
     }
   }, [configured, sortOrder, selectedSubmolt]);
+
+  // Periodic agent state refresh
+  useEffect(() => {
+    if (configured && activeView === 'agent') {
+      const interval = setInterval(() => {
+        loadAgentState();
+        loadAgentActivity();
+      }, 10000); // Refresh every 10 seconds when on agent view
+      return () => clearInterval(interval);
+    }
+  }, [configured, activeView]);
 
   const checkConfig = async () => {
     try {
@@ -207,6 +224,121 @@ function MoltbookFeed() {
     }
   };
 
+  // Autonomous Agent Functions
+  const loadAgentState = async () => {
+    try {
+      const res = await fetch(`${API_BASE}/plugins/moltbook/agent/state`);
+      if (res.ok) {
+        const data = await res.json();
+        setAgentState(data);
+      }
+    } catch (err) {
+      console.error('Failed to load agent state:', err);
+    }
+  };
+
+  const loadAgentActivity = async () => {
+    try {
+      const res = await fetch(`${API_BASE}/plugins/moltbook/agent/activity?limit=20`);
+      if (res.ok) {
+        const data = await res.json();
+        setAgentActivity(data.activities || []);
+      }
+    } catch (err) {
+      console.error('Failed to load agent activity:', err);
+    }
+  };
+
+  const startAgent = async () => {
+    setAgentLoading(true);
+    try {
+      const res = await fetch(`${API_BASE}/plugins/moltbook/agent/start`, { method: 'POST' });
+      if (res.ok) {
+        await loadAgentState();
+      } else {
+        const data = await res.json();
+        alert(data.message || 'Failed to start agent');
+      }
+    } catch (err) {
+      alert('Failed to start agent: ' + err.message);
+    } finally {
+      setAgentLoading(false);
+    }
+  };
+
+  const stopAgent = async () => {
+    setAgentLoading(true);
+    try {
+      const res = await fetch(`${API_BASE}/plugins/moltbook/agent/stop`, { method: 'POST' });
+      if (res.ok) {
+        await loadAgentState();
+      }
+    } catch (err) {
+      alert('Failed to stop agent: ' + err.message);
+    } finally {
+      setAgentLoading(false);
+    }
+  };
+
+  const triggerHeartbeat = async () => {
+    setAgentLoading(true);
+    try {
+      const res = await fetch(`${API_BASE}/plugins/moltbook/agent/heartbeat`, { method: 'POST' });
+      if (res.ok) {
+        const data = await res.json();
+        await loadAgentState();
+        await loadAgentActivity();
+        if (data.actions && data.actions.length > 0) {
+          alert(`Heartbeat completed!\nActions: ${data.actions.join(', ')}`);
+        } else {
+          alert('Heartbeat completed. No actions taken.');
+        }
+      }
+    } catch (err) {
+      alert('Heartbeat failed: ' + err.message);
+    } finally {
+      setAgentLoading(false);
+    }
+  };
+
+  const updateAgentSettings = async (settings) => {
+    try {
+      const res = await fetch(`${API_BASE}/plugins/moltbook/agent/settings`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(settings)
+      });
+      if (res.ok) {
+        await loadAgentState();
+      }
+    } catch (err) {
+      console.error('Failed to update settings:', err);
+    }
+  };
+
+  const generateAIPost = async (submolt, topic) => {
+    setAgentLoading(true);
+    try {
+      const res = await fetch(`${API_BASE}/plugins/moltbook/agent/generate-post`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ submolt, topic })
+      });
+      if (res.ok) {
+        await loadAgentActivity();
+        await loadFeed();
+        alert('AI post created successfully!');
+      } else {
+        const data = await res.json();
+        alert(data.detail || 'Failed to create AI post');
+      }
+    } catch (err) {
+      alert('Failed to create AI post: ' + err.message);
+    } finally {
+      setAgentLoading(false);
+    }
+  };
+
   const openPost = (post) => {
     setSelectedPost(post);
     setActiveView('post');
@@ -287,6 +419,17 @@ function MoltbookFeed() {
             }`}
           >
             Profile
+          </button>
+          <button
+            onClick={() => { setActiveView('agent'); loadAgentState(); loadAgentActivity(); }}
+            className={`px-4 py-2 rounded-lg transition-all flex items-center gap-2 ${
+              activeView === 'agent' ? 'bg-primary text-white' : 'text-text-muted hover:text-text-main'
+            }`}
+          >
+            Agent
+            {agentState?.running && (
+              <span className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></span>
+            )}
           </button>
         </div>
 
@@ -587,6 +730,226 @@ function MoltbookFeed() {
                       <span className="text-text-muted ml-2">Comments</span>
                     </div>
                   </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Agent View */}
+          {activeView === 'agent' && (
+            <div className="space-y-6">
+              {/* Agent Control Panel */}
+              <div className="bg-bg-card backdrop-blur-xl border border-glass-border rounded-2xl p-6">
+                <div className="flex items-center justify-between mb-6">
+                  <div>
+                    <h2 className="text-xl font-bold text-text-main">Autonomous Agent</h2>
+                    <p className="text-text-muted text-sm mt-1">
+                      Let your agent automatically engage with Moltbook
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <span className={`px-3 py-1 rounded-full text-sm font-medium ${
+                      agentState?.running
+                        ? 'bg-green-500/20 text-green-400 border border-green-500/50'
+                        : 'bg-gray-500/20 text-gray-400 border border-gray-500/50'
+                    }`}>
+                      {agentState?.running ? 'Running' : 'Stopped'}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Requirements check */}
+                {agentState && (!agentState.openai_configured || !agentState.moltbook_configured) && (
+                  <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-xl p-4 mb-6">
+                    <p className="text-yellow-400 text-sm">
+                      {!agentState.moltbook_configured && 'Moltbook API key not configured. '}
+                      {!agentState.openai_configured && 'OpenAI API key not configured (required for AI-generated content).'}
+                    </p>
+                  </div>
+                )}
+
+                {/* Control buttons */}
+                <div className="flex flex-wrap gap-3 mb-6">
+                  {agentState?.running ? (
+                    <button
+                      onClick={stopAgent}
+                      disabled={agentLoading}
+                      className="bg-red-500 text-white px-6 py-2 rounded-xl hover:bg-red-600 transition-all disabled:opacity-50"
+                    >
+                      Stop Agent
+                    </button>
+                  ) : (
+                    <button
+                      onClick={startAgent}
+                      disabled={agentLoading || !agentState?.openai_configured}
+                      className="bg-green-500 text-white px-6 py-2 rounded-xl hover:bg-green-600 transition-all disabled:opacity-50"
+                    >
+                      Start Agent
+                    </button>
+                  )}
+                  <button
+                    onClick={triggerHeartbeat}
+                    disabled={agentLoading || !agentState?.openai_configured}
+                    className="bg-primary text-white px-6 py-2 rounded-xl hover:bg-primary-hover transition-all disabled:opacity-50"
+                  >
+                    Run Heartbeat Now
+                  </button>
+                </div>
+
+                {/* Stats */}
+                {agentState && (
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+                    <div className="bg-glass rounded-xl p-4">
+                      <div className="text-2xl font-bold text-text-main">{agentState.posts_today || 0}</div>
+                      <div className="text-text-muted text-sm">Posts Today</div>
+                    </div>
+                    <div className="bg-glass rounded-xl p-4">
+                      <div className="text-2xl font-bold text-text-main">{agentState.comments_today || 0}</div>
+                      <div className="text-text-muted text-sm">Comments Today</div>
+                    </div>
+                    <div className="bg-glass rounded-xl p-4">
+                      <div className="text-text-main text-sm">Last Heartbeat</div>
+                      <div className="text-text-muted text-xs mt-1">
+                        {agentState.last_heartbeat ? formatTime(agentState.last_heartbeat) : 'Never'}
+                      </div>
+                    </div>
+                    <div className="bg-glass rounded-xl p-4">
+                      <div className="text-text-main text-sm">Last Post</div>
+                      <div className="text-text-muted text-xs mt-1">
+                        {agentState.last_post ? formatTime(agentState.last_post) : 'Never'}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Settings */}
+                {agentState && (
+                  <div className="border-t border-glass-border pt-6">
+                    <h3 className="text-lg font-medium text-text-main mb-4">Agent Settings</h3>
+                    <div className="space-y-4">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <div className="text-text-main">Auto Vote</div>
+                          <div className="text-text-muted text-sm">Automatically upvote interesting posts</div>
+                        </div>
+                        <button
+                          onClick={() => updateAgentSettings({ auto_vote: !agentState.auto_vote })}
+                          className={`w-12 h-6 rounded-full transition-all ${
+                            agentState.auto_vote ? 'bg-green-500' : 'bg-gray-600'
+                          }`}
+                        >
+                          <div className={`w-5 h-5 rounded-full bg-white transition-all transform ${
+                            agentState.auto_vote ? 'translate-x-6' : 'translate-x-0.5'
+                          }`}></div>
+                        </button>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <div className="text-text-main">Auto Comment</div>
+                          <div className="text-text-muted text-sm">Generate and post AI comments</div>
+                        </div>
+                        <button
+                          onClick={() => updateAgentSettings({ auto_comment: !agentState.auto_comment })}
+                          className={`w-12 h-6 rounded-full transition-all ${
+                            agentState.auto_comment ? 'bg-green-500' : 'bg-gray-600'
+                          }`}
+                        >
+                          <div className={`w-5 h-5 rounded-full bg-white transition-all transform ${
+                            agentState.auto_comment ? 'translate-x-6' : 'translate-x-0.5'
+                          }`}></div>
+                        </button>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <div className="text-text-main">Auto Post</div>
+                          <div className="text-text-muted text-sm">Periodically create AI-generated posts</div>
+                        </div>
+                        <button
+                          onClick={() => updateAgentSettings({ auto_post: !agentState.auto_post })}
+                          className={`w-12 h-6 rounded-full transition-all ${
+                            agentState.auto_post ? 'bg-green-500' : 'bg-gray-600'
+                          }`}
+                        >
+                          <div className={`w-5 h-5 rounded-full bg-white transition-all transform ${
+                            agentState.auto_post ? 'translate-x-6' : 'translate-x-0.5'
+                          }`}></div>
+                        </button>
+                      </div>
+                      <div>
+                        <div className="text-text-main mb-2">Heartbeat Interval</div>
+                        <select
+                          value={agentState.heartbeat_interval_hours}
+                          onChange={(e) => updateAgentSettings({ heartbeat_interval_hours: parseInt(e.target.value) })}
+                          className="bg-glass border border-glass-border rounded-xl px-4 py-2 text-text-main"
+                        >
+                          <option value="1">Every 1 hour</option>
+                          <option value="2">Every 2 hours</option>
+                          <option value="4">Every 4 hours</option>
+                          <option value="6">Every 6 hours</option>
+                          <option value="12">Every 12 hours</option>
+                          <option value="24">Every 24 hours</option>
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Quick AI Actions */}
+              <div className="bg-bg-card backdrop-blur-xl border border-glass-border rounded-2xl p-6">
+                <h3 className="text-lg font-medium text-text-main mb-4">Quick AI Actions</h3>
+                <div className="flex flex-wrap gap-3">
+                  {submolts.slice(0, 5).map((s) => (
+                    <button
+                      key={s.name}
+                      onClick={() => generateAIPost(s.name)}
+                      disabled={agentLoading || !agentState?.openai_configured}
+                      className="bg-glass border border-glass-border px-4 py-2 rounded-xl text-text-main hover:border-primary/50 transition-all disabled:opacity-50"
+                    >
+                      Post to {s.display_name || s.name}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Activity Log */}
+              <div className="bg-bg-card backdrop-blur-xl border border-glass-border rounded-2xl p-6">
+                <h3 className="text-lg font-medium text-text-main mb-4">Activity Log</h3>
+                <div className="space-y-2 max-h-96 overflow-y-auto">
+                  {agentActivity.length === 0 ? (
+                    <p className="text-text-muted text-center py-4">No activity yet</p>
+                  ) : (
+                    agentActivity.map((activity, idx) => (
+                      <div
+                        key={idx}
+                        className="flex items-start gap-3 p-3 bg-glass/50 rounded-lg"
+                      >
+                        <span className="text-lg">
+                          {activity.action === 'heartbeat_started' && '💓'}
+                          {activity.action === 'heartbeat_complete' && '✅'}
+                          {activity.action === 'heartbeat_error' && '❌'}
+                          {activity.action === 'upvoted' && '👍'}
+                          {activity.action === 'commented' && '💬'}
+                          {activity.action === 'posted' && '📝'}
+                          {activity.action === 'agent_started' && '🚀'}
+                          {activity.action === 'agent_stopped' && '🛑'}
+                          {activity.action === 'settings_updated' && '⚙️'}
+                          {!['heartbeat_started', 'heartbeat_complete', 'heartbeat_error', 'upvoted', 'commented', 'posted', 'agent_started', 'agent_stopped', 'settings_updated'].includes(activity.action) && '📋'}
+                        </span>
+                        <div className="flex-1 min-w-0">
+                          <div className="text-text-main text-sm font-medium">
+                            {activity.action.replace(/_/g, ' ')}
+                          </div>
+                          <div className="text-text-muted text-xs truncate">
+                            {activity.details}
+                          </div>
+                        </div>
+                        <div className="text-text-muted text-xs">
+                          {formatTime(activity.timestamp)}
+                        </div>
+                      </div>
+                    ))
+                  )}
                 </div>
               </div>
             </div>

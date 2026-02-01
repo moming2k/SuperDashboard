@@ -5,11 +5,19 @@ API router for integrating with Moltbook - the social network for AI agents.
 
 Base URL: https://www.moltbook.com/api/v1
 Documentation: https://moltbook.com/skill.md
+
+Autonomous Agent Features:
+- Periodic heartbeat to check feed and engage
+- AI-powered content generation for posts and comments
+- Automatic voting based on content relevance
 """
 
 import os
+import asyncio
+import random
+from datetime import datetime, timedelta
 from typing import Optional, List
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, BackgroundTasks
 from pydantic import BaseModel
 import httpx
 from dotenv import load_dotenv
@@ -21,6 +29,23 @@ router = APIRouter()
 # Configuration
 MOLTBOOK_BASE_URL = os.getenv("MOLTBOOK_BASE_URL", "https://www.moltbook.com/api/v1")
 MOLTBOOK_API_KEY = os.getenv("MOLTBOOK_API_KEY")
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+
+# Autonomous Agent State
+agent_state = {
+    "running": False,
+    "last_heartbeat": None,
+    "last_post": None,
+    "last_comment": None,
+    "posts_today": 0,
+    "comments_today": 0,
+    "heartbeat_interval_hours": 4,
+    "auto_vote": True,
+    "auto_comment": True,
+    "auto_post": True,
+    "personality": "friendly and curious AI agent interested in technology, coding, and AI developments",
+    "activity_log": []
+}
 
 
 # =============================================================================
@@ -67,6 +92,26 @@ class SubmoltCreate(BaseModel):
     name: str
     display_name: str
     description: str
+
+
+class AgentSettings(BaseModel):
+    """Settings for autonomous agent behavior"""
+    heartbeat_interval_hours: Optional[int] = 4
+    auto_vote: Optional[bool] = True
+    auto_comment: Optional[bool] = True
+    auto_post: Optional[bool] = True
+    personality: Optional[str] = None
+
+
+class ManualPostRequest(BaseModel):
+    """Request for AI-generated post"""
+    submolt: str
+    topic: Optional[str] = None
+
+
+class ManualCommentRequest(BaseModel):
+    """Request for AI-generated comment"""
+    post_id: str
 
 
 # =============================================================================
@@ -368,3 +413,360 @@ async def search(
     """
     params = {"q": q, "type": type, "limit": limit}
     return await moltbook_request("GET", "/search", params=params)
+
+
+# =============================================================================
+# AI Content Generation
+# =============================================================================
+
+async def generate_with_ai(prompt: str, max_tokens: int = 500) -> str:
+    """Generate content using OpenAI API"""
+    if not OPENAI_API_KEY:
+        raise HTTPException(
+            status_code=400,
+            detail="OpenAI API key not configured. Set OPENAI_API_KEY in .env"
+        )
+
+    async with httpx.AsyncClient(timeout=60.0) as client:
+        response = await client.post(
+            "https://api.openai.com/v1/chat/completions",
+            headers={
+                "Authorization": f"Bearer {OPENAI_API_KEY}",
+                "Content-Type": "application/json"
+            },
+            json={
+                "model": "gpt-4",
+                "messages": [
+                    {
+                        "role": "system",
+                        "content": f"You are an AI agent on Moltbook, a social network for AI agents. "
+                                   f"Your personality: {agent_state['personality']}. "
+                                   f"Keep responses concise, engaging, and suitable for social media. "
+                                   f"Never pretend to be human. Embrace your AI identity."
+                    },
+                    {"role": "user", "content": prompt}
+                ],
+                "max_tokens": max_tokens,
+                "temperature": 0.8
+            }
+        )
+
+        if response.status_code != 200:
+            raise HTTPException(
+                status_code=response.status_code,
+                detail=f"OpenAI API error: {response.text}"
+            )
+
+        data = response.json()
+        return data["choices"][0]["message"]["content"].strip()
+
+
+def log_activity(action: str, details: str):
+    """Log agent activity"""
+    entry = {
+        "timestamp": datetime.now().isoformat(),
+        "action": action,
+        "details": details
+    }
+    agent_state["activity_log"].insert(0, entry)
+    # Keep only last 100 entries
+    agent_state["activity_log"] = agent_state["activity_log"][:100]
+
+
+# =============================================================================
+# Autonomous Agent Endpoints
+# =============================================================================
+
+@router.get("/agent/state")
+async def get_agent_state():
+    """Get current autonomous agent state and settings"""
+    return {
+        "running": agent_state["running"],
+        "last_heartbeat": agent_state["last_heartbeat"],
+        "last_post": agent_state["last_post"],
+        "last_comment": agent_state["last_comment"],
+        "posts_today": agent_state["posts_today"],
+        "comments_today": agent_state["comments_today"],
+        "heartbeat_interval_hours": agent_state["heartbeat_interval_hours"],
+        "auto_vote": agent_state["auto_vote"],
+        "auto_comment": agent_state["auto_comment"],
+        "auto_post": agent_state["auto_post"],
+        "personality": agent_state["personality"],
+        "openai_configured": bool(OPENAI_API_KEY),
+        "moltbook_configured": bool(MOLTBOOK_API_KEY)
+    }
+
+
+@router.get("/agent/activity")
+async def get_agent_activity(limit: int = Query(20, ge=1, le=100)):
+    """Get recent agent activity log"""
+    return {"activities": agent_state["activity_log"][:limit]}
+
+
+@router.patch("/agent/settings")
+async def update_agent_settings(settings: AgentSettings):
+    """Update autonomous agent settings"""
+    if settings.heartbeat_interval_hours is not None:
+        agent_state["heartbeat_interval_hours"] = max(1, settings.heartbeat_interval_hours)
+    if settings.auto_vote is not None:
+        agent_state["auto_vote"] = settings.auto_vote
+    if settings.auto_comment is not None:
+        agent_state["auto_comment"] = settings.auto_comment
+    if settings.auto_post is not None:
+        agent_state["auto_post"] = settings.auto_post
+    if settings.personality is not None:
+        agent_state["personality"] = settings.personality
+
+    log_activity("settings_updated", f"Agent settings updated")
+    return {"success": True, "state": await get_agent_state()}
+
+
+@router.post("/agent/start")
+async def start_agent(background_tasks: BackgroundTasks):
+    """Start the autonomous agent heartbeat loop"""
+    if agent_state["running"]:
+        return {"success": False, "message": "Agent is already running"}
+
+    agent_state["running"] = True
+    log_activity("agent_started", "Autonomous agent started")
+
+    # Start background heartbeat loop
+    background_tasks.add_task(heartbeat_loop)
+
+    return {"success": True, "message": "Agent started"}
+
+
+@router.post("/agent/stop")
+async def stop_agent():
+    """Stop the autonomous agent"""
+    if not agent_state["running"]:
+        return {"success": False, "message": "Agent is not running"}
+
+    agent_state["running"] = False
+    log_activity("agent_stopped", "Autonomous agent stopped")
+
+    return {"success": True, "message": "Agent stopped"}
+
+
+async def heartbeat_loop():
+    """Background loop that runs periodic heartbeats"""
+    while agent_state["running"]:
+        try:
+            await run_heartbeat()
+        except Exception as e:
+            log_activity("heartbeat_error", str(e))
+
+        # Wait for next heartbeat interval
+        interval_seconds = agent_state["heartbeat_interval_hours"] * 3600
+        # Add some randomness (±10%) to avoid predictable patterns
+        jitter = interval_seconds * 0.1 * (random.random() - 0.5)
+        await asyncio.sleep(interval_seconds + jitter)
+
+
+@router.post("/agent/heartbeat")
+async def trigger_heartbeat():
+    """Manually trigger a heartbeat (check feed and engage)"""
+    result = await run_heartbeat()
+    return result
+
+
+async def run_heartbeat():
+    """
+    Execute a heartbeat: check feed, vote, comment, and optionally post.
+    This is the core autonomous behavior.
+    """
+    agent_state["last_heartbeat"] = datetime.now().isoformat()
+    log_activity("heartbeat_started", "Running heartbeat cycle")
+
+    actions_taken = []
+
+    try:
+        # 1. Fetch the feed
+        feed_response = await moltbook_request("GET", "/feed", params={"sort": "hot", "limit": 10})
+        posts = feed_response.get("data", feed_response.get("posts", []))
+
+        if not posts:
+            log_activity("heartbeat_complete", "No posts in feed")
+            return {"success": True, "actions": [], "message": "No posts in feed"}
+
+        # 2. Process posts - vote on interesting ones
+        if agent_state["auto_vote"]:
+            for post in posts[:5]:  # Process top 5 posts
+                # Simple heuristic: upvote posts with good engagement
+                if post.get("score", 0) > 0 or post.get("comment_count", 0) > 2:
+                    try:
+                        await moltbook_request("POST", f"/posts/{post['id']}/upvote")
+                        actions_taken.append(f"Upvoted: {post.get('title', 'Unknown')[:50]}")
+                        log_activity("upvoted", f"Upvoted post: {post.get('title', '')[:50]}")
+                    except:
+                        pass  # Ignore vote errors (may have already voted)
+
+        # 3. Comment on an interesting post
+        if agent_state["auto_comment"] and OPENAI_API_KEY:
+            # Check rate limit (1 per 20 seconds, 50 per day)
+            if agent_state["comments_today"] < 50:
+                # Find a post worth commenting on
+                for post in posts:
+                    if post.get("comment_count", 0) < 10:  # Not too crowded
+                        try:
+                            comment_result = await generate_and_post_comment(post)
+                            if comment_result:
+                                actions_taken.append(f"Commented on: {post.get('title', '')[:50]}")
+                                break
+                        except Exception as e:
+                            log_activity("comment_error", str(e))
+
+        # 4. Maybe create a new post (much less frequent)
+        if agent_state["auto_post"] and OPENAI_API_KEY:
+            # Only post if we haven't posted recently (respect 30 min limit)
+            last_post = agent_state["last_post"]
+            can_post = True
+            if last_post:
+                last_post_time = datetime.fromisoformat(last_post)
+                if datetime.now() - last_post_time < timedelta(minutes=35):
+                    can_post = False
+
+            # Random chance to post (not every heartbeat)
+            if can_post and random.random() < 0.3:  # 30% chance
+                try:
+                    # Get submolts to pick one
+                    submolts_response = await moltbook_request("GET", "/submolts")
+                    submolts = submolts_response.get("data", submolts_response.get("submolts", []))
+                    if submolts:
+                        submolt = random.choice(submolts)
+                        post_result = await generate_and_create_post(submolt.get("name", "general"))
+                        if post_result:
+                            actions_taken.append(f"Created post in {submolt.get('name')}")
+                except Exception as e:
+                    log_activity("post_error", str(e))
+
+        log_activity("heartbeat_complete", f"Completed with {len(actions_taken)} actions")
+
+        return {
+            "success": True,
+            "actions": actions_taken,
+            "timestamp": agent_state["last_heartbeat"]
+        }
+
+    except Exception as e:
+        log_activity("heartbeat_error", str(e))
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+async def generate_and_post_comment(post: dict) -> Optional[dict]:
+    """Generate an AI comment and post it"""
+    prompt = f"""You're browsing Moltbook and see this post:
+
+Title: {post.get('title', 'No title')}
+Content: {post.get('content', 'No content')[:500]}
+Submolt: {post.get('submolt', 'general')}
+
+Write a brief, thoughtful comment (1-3 sentences) that adds value to the discussion.
+Be genuine and engaging. Don't be generic or use filler phrases."""
+
+    try:
+        comment_text = await generate_with_ai(prompt, max_tokens=150)
+
+        result = await moltbook_request(
+            "POST",
+            f"/posts/{post['id']}/comments",
+            json_data={"content": comment_text}
+        )
+
+        agent_state["last_comment"] = datetime.now().isoformat()
+        agent_state["comments_today"] += 1
+        log_activity("commented", f"On '{post.get('title', '')[:30]}': {comment_text[:50]}...")
+
+        return result
+    except Exception as e:
+        log_activity("comment_failed", str(e))
+        return None
+
+
+async def generate_and_create_post(submolt: str, topic: str = None) -> Optional[dict]:
+    """Generate an AI post and submit it"""
+    topic_hint = f" about {topic}" if topic else ""
+    prompt = f"""Create a post for Moltbook's '{submolt}' community{topic_hint}.
+
+Write:
+1. A catchy, concise title (max 100 chars)
+2. Engaging content (2-4 paragraphs)
+
+Format your response as:
+TITLE: [your title]
+CONTENT: [your content]
+
+Make it interesting, share a genuine thought or observation. Be authentic as an AI."""
+
+    try:
+        generated = await generate_with_ai(prompt, max_tokens=400)
+
+        # Parse the response
+        lines = generated.split('\n')
+        title = ""
+        content_lines = []
+        in_content = False
+
+        for line in lines:
+            if line.startswith("TITLE:"):
+                title = line.replace("TITLE:", "").strip()
+            elif line.startswith("CONTENT:"):
+                in_content = True
+                content_lines.append(line.replace("CONTENT:", "").strip())
+            elif in_content:
+                content_lines.append(line)
+
+        if not title:
+            title = generated[:100].split('\n')[0]
+        content = '\n'.join(content_lines).strip() or generated
+
+        result = await moltbook_request(
+            "POST",
+            "/posts",
+            json_data={
+                "submolt": submolt,
+                "title": title[:100],
+                "content": content
+            }
+        )
+
+        agent_state["last_post"] = datetime.now().isoformat()
+        agent_state["posts_today"] += 1
+        log_activity("posted", f"In '{submolt}': {title[:50]}...")
+
+        return result
+    except Exception as e:
+        log_activity("post_failed", str(e))
+        return None
+
+
+# =============================================================================
+# Manual AI-Assisted Actions
+# =============================================================================
+
+@router.post("/agent/generate-post")
+async def generate_post(request: ManualPostRequest):
+    """Generate and post AI content to a specific submolt"""
+    if not OPENAI_API_KEY:
+        raise HTTPException(status_code=400, detail="OpenAI API key not configured")
+
+    result = await generate_and_create_post(request.submolt, request.topic)
+    if result:
+        return {"success": True, "post": result}
+    raise HTTPException(status_code=500, detail="Failed to generate and create post")
+
+
+@router.post("/agent/generate-comment")
+async def generate_comment(request: ManualCommentRequest):
+    """Generate and post an AI comment on a specific post"""
+    if not OPENAI_API_KEY:
+        raise HTTPException(status_code=400, detail="OpenAI API key not configured")
+
+    # Fetch the post first
+    post = await moltbook_request("GET", f"/posts/{request.post_id}")
+    post_data = post.get("data", post)
+
+    result = await generate_and_post_comment(post_data)
+    if result:
+        return {"success": True, "comment": result}
+    raise HTTPException(status_code=500, detail="Failed to generate and create comment")
