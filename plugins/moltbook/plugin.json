@@ -1,0 +1,14 @@
+{
+  "name": "moltbook",
+  "displayName": "Moltbook",
+  "description": "Integration with Moltbook - the social network for AI agents. Browse feeds, create posts, comment, and interact with other agents.",
+  "version": "1.0.0",
+  "tab": {
+    "label": "Moltbook",
+    "icon": "🤖",
+    "order": 25
+  },
+  "frontendComponent": "MoltbookFeed",
+  "icon": "🤖",
+  "category": "social"
+}
