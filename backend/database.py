@@ -177,3 +177,89 @@ class UserSuiteSelection(Base):
     is_active = Column(Boolean, nullable=False, default=True)  # Current active suite for user
     activated_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+# =============================================================================
+# Moltbook Plugin Models
+# =============================================================================
+
+class MoltbookReviewItem(Base):
+    """Model for storing Moltbook review queue items (incoming/outgoing content)"""
+    __tablename__ = "moltbook_review_items"
+    __table_args__ = (
+        Index('ix_moltbook_review_queue_type_status', 'queue_type', 'status'),
+    )
+
+    id = Column(String, primary_key=True, index=True)
+    queue_type = Column(String, nullable=False)  # "incoming" or "outgoing"
+    status = Column(String, nullable=False, default="pending")  # pending, approved, rejected
+
+    # Content details
+    content = Column(Text, nullable=True)
+    content_type = Column(String, nullable=True)  # "comment", "post", etc.
+
+    # For incoming posts
+    post_id = Column(String, nullable=True)
+    post_title = Column(String, nullable=True)
+    post_content = Column(Text, nullable=True)
+
+    # For outgoing content
+    target_post_id = Column(String, nullable=True)
+    target_post_title = Column(String, nullable=True)
+    submolt = Column(String, nullable=True)
+    title = Column(String, nullable=True)
+
+    # Classification results
+    classification = Column(JSON, nullable=True)  # AI classification result
+
+    # Review metadata
+    action = Column(String, nullable=True)  # What action was attempted (comment, post, etc.)
+    rejection_reason = Column(Text, nullable=True)
+
+    queued_at = Column(DateTime, default=datetime.utcnow)
+    reviewed_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class MoltbookActivityLog(Base):
+    """Model for storing Moltbook agent activity logs"""
+    __tablename__ = "moltbook_activity_logs"
+    __table_args__ = (
+        Index('ix_moltbook_activity_action', 'action'),
+    )
+
+    id = Column(String, primary_key=True, index=True)
+    action = Column(String, nullable=False)  # heartbeat_started, commented, posted, security_blocked, etc.
+    details = Column(Text, nullable=True)
+    timestamp = Column(DateTime, default=datetime.utcnow, index=True)
+
+
+class MoltbookAgentState(Base):
+    """Model for storing Moltbook autonomous agent state"""
+    __tablename__ = "moltbook_agent_state"
+
+    key = Column(String, primary_key=True, index=True)  # Single row with key='default'
+    running = Column(Boolean, nullable=False, default=False)
+    last_heartbeat = Column(DateTime, nullable=True)
+    last_post = Column(DateTime, nullable=True)
+    last_comment = Column(DateTime, nullable=True)
+    posts_today = Column(Integer, nullable=False, default=0)
+    comments_today = Column(Integer, nullable=False, default=0)
+    posts_today_reset = Column(DateTime, nullable=True)  # When to reset daily counters
+    heartbeat_interval_hours = Column(Integer, nullable=False, default=4)
+    auto_vote = Column(Boolean, nullable=False, default=True)
+    auto_comment = Column(Boolean, nullable=False, default=True)
+    auto_post = Column(Boolean, nullable=False, default=True)
+    personality = Column(Text, nullable=False, default="friendly and curious AI agent interested in technology, coding, and AI developments")
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class MoltbookClassificationCache(Base):
+    """Model for caching AI classification results to avoid repeated API calls"""
+    __tablename__ = "moltbook_classification_cache"
+
+    cache_key = Column(String, primary_key=True, index=True)  # Hash of content
+    cache_type = Column(String, nullable=False)  # "incoming" or "outgoing"
+    result = Column(JSON, nullable=False)  # Classification result
+    created_at = Column(DateTime, default=datetime.utcnow)
+    expires_at = Column(DateTime, nullable=False)  # Cache expiration time
