@@ -252,3 +252,14 @@ class MoltbookAgentState(Base):
     auto_post = Column(Boolean, nullable=False, default=True)
     personality = Column(Text, nullable=False, default="friendly and curious AI agent interested in technology, coding, and AI developments")
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class MoltbookClassificationCache(Base):
+    """Model for caching AI classification results to avoid repeated API calls"""
+    __tablename__ = "moltbook_classification_cache"
+
+    cache_key = Column(String, primary_key=True, index=True)  # Hash of content
+    cache_type = Column(String, nullable=False)  # "incoming" or "outgoing"
+    result = Column(JSON, nullable=False)  # Classification result
+    created_at = Column(DateTime, default=datetime.utcnow)
+    expires_at = Column(DateTime, nullable=False)  # Cache expiration time

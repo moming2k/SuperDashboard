@@ -34,7 +34,7 @@ backend_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../
 if backend_dir not in sys.path:
     sys.path.insert(0, backend_dir)
 
-from database import get_db, MoltbookReviewItem, MoltbookActivityLog, MoltbookAgentState
+from database import get_db, MoltbookReviewItem, MoltbookActivityLog, MoltbookAgentState, MoltbookClassificationCache
 
 router = APIRouter()
 
@@ -209,8 +209,66 @@ def is_safe_to_send(content: str, context: str = "content") -> Tuple[bool, str]:
 # AI Content Moderation (Classifiers)
 # =============================================================================
 
-# Classification results cache (to avoid re-classifying same content)
-_classification_cache = {}
+# Cache expiration time (24 hours)
+CACHE_EXPIRATION_HOURS = 24
+
+
+def get_cached_classification(cache_key: str) -> Optional[dict]:
+    """Get cached classification result from database"""
+    from database import SessionLocal
+    db = SessionLocal()
+    try:
+        cached = db.query(MoltbookClassificationCache).filter(
+            MoltbookClassificationCache.cache_key == cache_key,
+            MoltbookClassificationCache.expires_at > datetime.now()
+        ).first()
+        if cached:
+            return cached.result
+        return None
+    finally:
+        db.close()
+
+
+def set_cached_classification(cache_key: str, cache_type: str, result: dict):
+    """Store classification result in database cache"""
+    from database import SessionLocal
+    db = SessionLocal()
+    try:
+        # Check if exists and update, or create new
+        existing = db.query(MoltbookClassificationCache).filter(
+            MoltbookClassificationCache.cache_key == cache_key
+        ).first()
+
+        expires_at = datetime.now() + timedelta(hours=CACHE_EXPIRATION_HOURS)
+
+        if existing:
+            existing.result = result
+            existing.expires_at = expires_at
+            existing.created_at = datetime.now()
+        else:
+            new_cache = MoltbookClassificationCache(
+                cache_key=cache_key,
+                cache_type=cache_type,
+                result=result,
+                expires_at=expires_at
+            )
+            db.add(new_cache)
+        db.commit()
+    finally:
+        db.close()
+
+
+def cleanup_expired_cache():
+    """Remove expired cache entries (called periodically)"""
+    from database import SessionLocal
+    db = SessionLocal()
+    try:
+        db.query(MoltbookClassificationCache).filter(
+            MoltbookClassificationCache.expires_at < datetime.now()
+        ).delete(synchronize_session=False)
+        db.commit()
+    finally:
+        db.close()
 
 
 # =============================================================================
@@ -313,10 +371,11 @@ async def ai_classify_incoming(post: dict) -> dict:
     post_content = post.get('content', '')[:1000]
     post_author = post.get('author', 'unknown')
 
-    # Check cache first
+    # Check database cache first
     cache_key = f"in:{hash(post_title + post_content)}"
-    if cache_key in _classification_cache:
-        return _classification_cache[cache_key]
+    cached_result = get_cached_classification(cache_key)
+    if cached_result:
+        return cached_result
 
     classification_prompt = f"""You are a content safety classifier for an AI agent on a social network.
 Analyze this post and classify it for safety.
@@ -391,8 +450,8 @@ Respond in this exact JSON format:
             result["should_engage"] = classification == "safe"
             result["requires_review"] = classification in ["suspicious", "malicious"]
 
-            # Cache the result
-            _classification_cache[cache_key] = result
+            # Cache the result in database
+            set_cached_classification(cache_key, "incoming", result)
 
             return result
 
@@ -431,10 +490,11 @@ async def ai_classify_outgoing(content: str, content_type: str = "message") -> d
             "sanitized_content": None
         }
 
-    # Check cache
+    # Check database cache
     cache_key = f"out:{hash(content)}"
-    if cache_key in _classification_cache:
-        return _classification_cache[cache_key]
+    cached_result = get_cached_classification(cache_key)
+    if cached_result:
+        return cached_result
 
     review_prompt = f"""You are a security reviewer for an AI agent's outgoing messages.
 Review this {content_type} that the AI is about to send to a public social network.
@@ -513,8 +573,8 @@ Respond in this exact JSON format:
             if not result.get("safe_to_send", True):
                 result["sanitized_content"] = sanitize_content(content)
 
-            # Cache result
-            _classification_cache[cache_key] = result
+            # Cache result in database
+            set_cached_classification(cache_key, "outgoing", result)
 
             return result
 
@@ -526,11 +586,6 @@ Respond in this exact JSON format:
             "requires_review": True,
             "sanitized_content": None
         }
-
-
-# Legacy in-memory state for backwards compatibility during transition
-# These are now backed by database and should be accessed via get_or_create_agent_state
-_agent_state_cache = None
 
 
 def get_agent_state_dict(db: Session) -> dict:
