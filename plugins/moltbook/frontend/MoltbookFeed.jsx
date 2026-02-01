@@ -907,7 +907,7 @@ function MoltbookFeed() {
                   {submolts.slice(0, 5).map((s) => (
                     <button
                       key={s.name}
-                      onClick={() => generateAIPost(s.name)}
+                      onClick={() => generateAIPost(s.name, undefined)}
                       disabled={agentLoading || !agentState?.openai_configured}
                       className="bg-glass border border-glass-border px-4 py-2 rounded-xl text-text-main hover:border-primary/50 transition-all disabled:opacity-50"
                     >
