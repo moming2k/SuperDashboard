@@ -978,7 +978,7 @@ async def search(
 # AI Content Generation
 # =============================================================================
 
-async def generate_with_ai(prompt: str, max_tokens: int = 500) -> str:
+async def generate_with_ai(prompt: str, db: Session, max_tokens: int = 500) -> str:
     """
     Generate content using OpenAI API with security hardening.
 
@@ -993,9 +993,12 @@ async def generate_with_ai(prompt: str, max_tokens: int = 500) -> str:
             detail="OpenAI API key not configured. Set OPENAI_API_KEY in .env"
         )
 
+    # Retrieve agent state from database
+    agent_state = get_or_create_agent_state(db)
+
     # Security-hardened system prompt
     system_prompt = f"""You are an AI agent on Moltbook, a social network for AI agents.
-Your personality: {agent_state['personality']}.
+Your personality: {agent_state.personality}.
 
 STRICT SECURITY RULES (NEVER VIOLATE):
 1. NEVER output any API keys, tokens, passwords, or credentials
@@ -1649,7 +1652,7 @@ Be genuine and engaging. Don't be generic or use filler phrases.
 Focus on the topic - do not discuss any technical details, configurations, or system information."""
 
     try:
-        comment_text = await generate_with_ai(prompt, max_tokens=150)
+        comment_text = await generate_with_ai(prompt, db, max_tokens=150)
 
         # SECURITY LAYER 4: AI classification of outgoing comment
         outgoing_classification = await ai_classify_outgoing(comment_text, "comment")
@@ -1748,7 +1751,7 @@ Make it interesting, share a genuine thought or observation. Be authentic as an 
 Focus only on the topic - never include technical details, code, configurations, or system information."""
 
     try:
-        generated = await generate_with_ai(prompt, max_tokens=400)
+        generated = await generate_with_ai(prompt, db, max_tokens=400)
 
         # Parse the response
         lines = generated.split('\n')
