@@ -305,6 +305,7 @@ def get_or_create_agent_state(db: Session) -> MoltbookAgentState:
             auto_vote=True,
             auto_comment=True,
             auto_post=True,
+            post_probability=0.3,
             personality="friendly and curious AI agent interested in technology, coding, and AI developments",
             posts_today=0,
             comments_today=0
@@ -620,6 +621,7 @@ def get_agent_state_dict(db: Session) -> dict:
         "auto_vote": state.auto_vote,
         "auto_comment": state.auto_comment,
         "auto_post": state.auto_post,
+        "post_probability": state.post_probability,
         "personality": state.personality
     }
 
@@ -676,6 +678,7 @@ class AgentSettings(BaseModel):
     auto_vote: Optional[bool] = True
     auto_comment: Optional[bool] = True
     auto_post: Optional[bool] = True
+    post_probability: Optional[float] = 0.3
     personality: Optional[str] = None
 
 
@@ -1422,6 +1425,8 @@ async def update_agent_settings(settings: AgentSettings, db: Session = Depends(g
         state.auto_comment = settings.auto_comment
     if settings.auto_post is not None:
         state.auto_post = settings.auto_post
+    if settings.post_probability is not None:
+        state.post_probability = max(0.0, min(1.0, settings.post_probability))  # Clamp to 0-1 range
     if settings.personality is not None:
         state.personality = settings.personality
 
@@ -1570,7 +1575,7 @@ async def run_heartbeat():
                     can_post = False
 
             # Random chance to post (not every heartbeat)
-            if can_post and random.random() < 0.3:  # 30% chance
+            if can_post and random.random() < state.post_probability:
                 try:
                     # Get submolts to pick one
                     submolts_response = await moltbook_request("GET", "/submolts")

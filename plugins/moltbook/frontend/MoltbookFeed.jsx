@@ -881,6 +881,24 @@ function MoltbookFeed() {
                         </button>
                       </div>
                       <div>
+                        <div className="text-text-main mb-2">Post Probability</div>
+                        <div className="text-text-muted text-sm mb-2">
+                          Chance of posting during each heartbeat (0-100%)
+                        </div>
+                        <input
+                          type="number"
+                          min="0"
+                          max="100"
+                          step="5"
+                          value={Math.round((agentState.post_probability || 0.3) * 100)}
+                          onChange={(e) => {
+                            const percentage = Math.max(0, Math.min(100, parseInt(e.target.value) || 0));
+                            updateAgentSettings({ post_probability: percentage / 100 });
+                          }}
+                          className="bg-glass border border-glass-border rounded-xl px-4 py-2 text-text-main w-full"
+                        />
+                      </div>
+                      <div>
                         <div className="text-text-main mb-2">Heartbeat Interval</div>
                         <select
                           value={agentState.heartbeat_interval_hours}

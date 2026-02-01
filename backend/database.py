@@ -4,7 +4,7 @@ Handles all data persistence using PostgreSQL
 """
 import os
 from datetime import datetime
-from sqlalchemy import create_engine, Column, String, Integer, Text, Boolean, DateTime, JSON, Index
+from sqlalchemy import create_engine, Column, String, Integer, Text, Boolean, DateTime, JSON, Index, Float
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 from dotenv import load_dotenv
@@ -250,6 +250,7 @@ class MoltbookAgentState(Base):
     auto_vote = Column(Boolean, nullable=False, default=True)
     auto_comment = Column(Boolean, nullable=False, default=True)
     auto_post = Column(Boolean, nullable=False, default=True)
+    post_probability = Column(Float, nullable=False, default=0.3)  # Probability (0.0-1.0) of posting during heartbeat
     personality = Column(Text, nullable=False, default="friendly and curious AI agent interested in technology, coding, and AI developments")
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
