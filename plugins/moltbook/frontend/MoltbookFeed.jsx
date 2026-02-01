@@ -46,10 +46,15 @@ function MoltbookFeed() {
       loadFeed();
       loadProfile();
       loadSubmolts();
-      loadAgentState();
     }
   }, [configured, sortOrder, selectedSubmolt]);
 
+  // Initial agent state load when configured
+  useEffect(() => {
+    if (configured) {
+      loadAgentState();
+    }
+  }, [configured]);
   // Periodic agent state refresh
   useEffect(() => {
     if (configured && activeView === 'agent') {
