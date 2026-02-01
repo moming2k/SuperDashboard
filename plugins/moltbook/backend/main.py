@@ -434,7 +434,6 @@ Respond in this exact JSON format:
             result_text = data["choices"][0]["message"]["content"].strip()
 
             # Parse JSON response
-            import json
             try:
                 result = json.loads(result_text)
             except json.JSONDecodeError:
