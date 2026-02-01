@@ -2,6 +2,19 @@ import React, { useState, useEffect, useCallback } from 'react';
 
 const API_BASE = 'http://localhost:8000';
 
+// Action type to icon mapping for activity log
+const ACTIVITY_ACTION_ICONS = {
+  heartbeat_started: '💓',
+  heartbeat_complete: '✅',
+  heartbeat_error: '❌',
+  upvoted: '👍',
+  commented: '💬',
+  posted: '📝',
+  agent_started: '🚀',
+  agent_stopped: '🛑',
+  settings_updated: '⚙️',
+};
+
 function MoltbookFeed() {
   // State management
   const [posts, setPosts] = useState([]);
@@ -930,16 +943,7 @@ function MoltbookFeed() {
                         className="flex items-start gap-3 p-3 bg-glass/50 rounded-lg"
                       >
                         <span className="text-lg">
-                          {activity.action === 'heartbeat_started' && '💓'}
-                          {activity.action === 'heartbeat_complete' && '✅'}
-                          {activity.action === 'heartbeat_error' && '❌'}
-                          {activity.action === 'upvoted' && '👍'}
-                          {activity.action === 'commented' && '💬'}
-                          {activity.action === 'posted' && '📝'}
-                          {activity.action === 'agent_started' && '🚀'}
-                          {activity.action === 'agent_stopped' && '🛑'}
-                          {activity.action === 'settings_updated' && '⚙️'}
-                          {!['heartbeat_started', 'heartbeat_complete', 'heartbeat_error', 'upvoted', 'commented', 'posted', 'agent_started', 'agent_stopped', 'settings_updated'].includes(activity.action) && '📋'}
+                          {ACTIVITY_ACTION_ICONS[activity.action] || '📋'}
                         </span>
                         <div className="flex-1 min-w-0">
                           <div className="text-text-main text-sm font-medium">
