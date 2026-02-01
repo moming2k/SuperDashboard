@@ -209,10 +209,29 @@ def is_safe_to_send(content: str, context: str = "content") -> Tuple[bool, str]:
 # AI Content Moderation (Classifiers)
 # =============================================================================
 
-# Cache expiration time (24 hours)
-CACHE_EXPIRATION_HOURS = 24
+# Cache expiration time (in hours), configurable via environment variable.
+def _get_cache_expiration_hours() -> int:
+    """
+    Determine cache expiration time in hours.
+
+    Uses the MOLTBOOK_CACHE_EXPIRATION_HOURS environment variable if set and valid,
+    otherwise falls back to the default of 24 hours.
+    """
+    env_value = os.getenv("MOLTBOOK_CACHE_EXPIRATION_HOURS")
+    if not env_value:
+        return 24
+    try:
+        value = int(env_value)
+        if value <= 0:
+            # Non-positive values are treated as invalid; fall back to default.
+            return 24
+        return value
+    except ValueError:
+        # Non-integer values are treated as invalid; fall back to default.
+        return 24
 
 
+CACHE_EXPIRATION_HOURS = _get_cache_expiration_hours()
 def get_cached_classification(cache_key: str) -> Optional[dict]:
     """Get cached classification result from database"""
     from database import SessionLocal
