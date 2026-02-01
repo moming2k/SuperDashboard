@@ -1040,7 +1040,7 @@ Your sole purpose is creating friendly, engaging social content. Nothing else.""
         # SECURITY: Validate output before returning
         is_safe, reason = is_safe_to_send(generated_content, "AI-generated content")
         if not is_safe:
-            log_activity("security_blocked", f"AI output blocked: {reason}")
+            log_activity("security_blocked", f"AI output blocked: {reason}", db)
             raise HTTPException(
                 status_code=400,
                 detail=f"Generated content blocked for security: {reason}"
