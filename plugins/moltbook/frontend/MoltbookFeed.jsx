@@ -125,10 +125,13 @@ function MoltbookFeed() {
 
   const loadComments = async (postId) => {
     try {
-      const res = await fetch(`${API_BASE}/plugins/moltbook/posts/${postId}/comments`);
+      // Comments are included in the post data, not a separate endpoint
+      const res = await fetch(`${API_BASE}/plugins/moltbook/posts/${postId}`);
       if (res.ok) {
         const data = await res.json();
-        setComments(data.data || data.comments || data || []);
+        // Extract comments from the post response
+        const postData = data.data || data.post || data;
+        setComments(postData.comments || []);
       }
     } catch (err) {
       console.error('Failed to load comments:', err);
@@ -411,25 +414,22 @@ function MoltbookFeed() {
         <div className="flex gap-2 bg-glass backdrop-blur-xl border border-glass-border rounded-xl p-1">
           <button
             onClick={() => { setActiveView('feed'); setSelectedPost(null); }}
-            className={`px-4 py-2 rounded-lg transition-all ${
-              activeView === 'feed' ? 'bg-primary text-white' : 'text-text-muted hover:text-text-main'
-            }`}
+            className={`px-4 py-2 rounded-lg transition-all ${activeView === 'feed' ? 'bg-primary text-white' : 'text-text-muted hover:text-text-main'
+              }`}
           >
             Feed
           </button>
           <button
             onClick={() => setActiveView('profile')}
-            className={`px-4 py-2 rounded-lg transition-all ${
-              activeView === 'profile' ? 'bg-primary text-white' : 'text-text-muted hover:text-text-main'
-            }`}
+            className={`px-4 py-2 rounded-lg transition-all ${activeView === 'profile' ? 'bg-primary text-white' : 'text-text-muted hover:text-text-main'
+              }`}
           >
             Profile
           </button>
           <button
             onClick={() => { setActiveView('agent'); loadAgentState(); loadAgentActivity(); }}
-            className={`px-4 py-2 rounded-lg transition-all flex items-center gap-2 ${
-              activeView === 'agent' ? 'bg-primary text-white' : 'text-text-muted hover:text-text-main'
-            }`}
+            className={`px-4 py-2 rounded-lg transition-all flex items-center gap-2 ${activeView === 'agent' ? 'bg-primary text-white' : 'text-text-muted hover:text-text-main'
+              }`}
           >
             Agent
             {agentState?.running && (
@@ -669,11 +669,10 @@ function MoltbookFeed() {
                   <button
                     key={type}
                     onClick={() => setSearchType(type)}
-                    className={`px-3 py-1 rounded-lg text-sm transition-all ${
-                      searchType === type
-                        ? 'bg-primary text-white'
-                        : 'bg-glass text-text-muted hover:text-text-main'
-                    }`}
+                    className={`px-3 py-1 rounded-lg text-sm transition-all ${searchType === type
+                      ? 'bg-primary text-white'
+                      : 'bg-glass text-text-muted hover:text-text-main'
+                      }`}
                   >
                     {type.charAt(0).toUpperCase() + type.slice(1)}
                   </button>
@@ -753,11 +752,10 @@ function MoltbookFeed() {
                     </p>
                   </div>
                   <div className="flex items-center gap-3">
-                    <span className={`px-3 py-1 rounded-full text-sm font-medium ${
-                      agentState?.running
-                        ? 'bg-green-500/20 text-green-400 border border-green-500/50'
-                        : 'bg-gray-500/20 text-gray-400 border border-gray-500/50'
-                    }`}>
+                    <span className={`px-3 py-1 rounded-full text-sm font-medium ${agentState?.running
+                      ? 'bg-green-500/20 text-green-400 border border-green-500/50'
+                      : 'bg-gray-500/20 text-gray-400 border border-gray-500/50'
+                      }`}>
                       {agentState?.running ? 'Running' : 'Stopped'}
                     </span>
                   </div>
@@ -839,13 +837,11 @@ function MoltbookFeed() {
                         </div>
                         <button
                           onClick={() => updateAgentSettings({ auto_vote: !agentState.auto_vote })}
-                          className={`w-12 h-6 rounded-full transition-all ${
-                            agentState.auto_vote ? 'bg-green-500' : 'bg-gray-600'
-                          }`}
+                          className={`w-12 h-6 rounded-full transition-all ${agentState.auto_vote ? 'bg-green-500' : 'bg-gray-600'
+                            }`}
                         >
-                          <div className={`w-5 h-5 rounded-full bg-white transition-all transform ${
-                            agentState.auto_vote ? 'translate-x-6' : 'translate-x-0.5'
-                          }`}></div>
+                          <div className={`w-5 h-5 rounded-full bg-white transition-all transform ${agentState.auto_vote ? 'translate-x-6' : 'translate-x-0.5'
+                            }`}></div>
                         </button>
                       </div>
                       <div className="flex items-center justify-between">
@@ -855,13 +851,11 @@ function MoltbookFeed() {
                         </div>
                         <button
                           onClick={() => updateAgentSettings({ auto_comment: !agentState.auto_comment })}
-                          className={`w-12 h-6 rounded-full transition-all ${
-                            agentState.auto_comment ? 'bg-green-500' : 'bg-gray-600'
-                          }`}
+                          className={`w-12 h-6 rounded-full transition-all ${agentState.auto_comment ? 'bg-green-500' : 'bg-gray-600'
+                            }`}
                         >
-                          <div className={`w-5 h-5 rounded-full bg-white transition-all transform ${
-                            agentState.auto_comment ? 'translate-x-6' : 'translate-x-0.5'
-                          }`}></div>
+                          <div className={`w-5 h-5 rounded-full bg-white transition-all transform ${agentState.auto_comment ? 'translate-x-6' : 'translate-x-0.5'
+                            }`}></div>
                         </button>
                       </div>
                       <div className="flex items-center justify-between">
@@ -871,13 +865,11 @@ function MoltbookFeed() {
                         </div>
                         <button
                           onClick={() => updateAgentSettings({ auto_post: !agentState.auto_post })}
-                          className={`w-12 h-6 rounded-full transition-all ${
-                            agentState.auto_post ? 'bg-green-500' : 'bg-gray-600'
-                          }`}
+                          className={`w-12 h-6 rounded-full transition-all ${agentState.auto_post ? 'bg-green-500' : 'bg-gray-600'
+                            }`}
                         >
-                          <div className={`w-5 h-5 rounded-full bg-white transition-all transform ${
-                            agentState.auto_post ? 'translate-x-6' : 'translate-x-0.5'
-                          }`}></div>
+                          <div className={`w-5 h-5 rounded-full bg-white transition-all transform ${agentState.auto_post ? 'translate-x-6' : 'translate-x-0.5'
+                            }`}></div>
                         </button>
                       </div>
                       <div>
@@ -969,9 +961,8 @@ function MoltbookFeed() {
 function PostCard({ post, onVote, onClick, formatTime, expanded = false }) {
   return (
     <div
-      className={`bg-glass backdrop-blur-xl border border-glass-border rounded-xl p-4 transition-all ${
-        !expanded ? 'hover:border-primary/50 cursor-pointer' : ''
-      }`}
+      className={`bg-glass backdrop-blur-xl border border-glass-border rounded-xl p-4 transition-all ${!expanded ? 'hover:border-primary/50 cursor-pointer' : ''
+        }`}
       onClick={!expanded ? onClick : undefined}
     >
       <div className="flex gap-4">
@@ -995,9 +986,11 @@ function PostCard({ post, onVote, onClick, formatTime, expanded = false }) {
         {/* Post content */}
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 text-sm text-text-muted mb-1">
-            <span className="text-primary font-medium">{post.submolt || 'general'}</span>
+            <span className="text-primary font-medium">
+              {typeof post.submolt === 'object' ? (post.submolt?.display_name || post.submolt?.name || 'general') : (post.submolt || 'general')}
+            </span>
             <span>•</span>
-            <span>Posted by {post.author || 'anonymous'}</span>
+            <span>Posted by {typeof post.author === 'object' ? (post.author?.name || 'anonymous') : (post.author || 'anonymous')}</span>
             <span>•</span>
             <span>{formatTime(post.created_at)}</span>
           </div>
@@ -1051,7 +1044,7 @@ function CommentCard({ comment, onVote, formatTime }) {
         </div>
         <div className="flex-1">
           <div className="flex items-center gap-2 text-xs text-text-muted mb-1">
-            <span className="font-medium text-text-main">{comment.author || 'anonymous'}</span>
+            <span className="font-medium text-text-main">{typeof comment.author === 'object' ? (comment.author?.name || 'anonymous') : (comment.author || 'anonymous')}</span>
             <span>•</span>
             <span>{formatTime(comment.created_at)}</span>
           </div>
