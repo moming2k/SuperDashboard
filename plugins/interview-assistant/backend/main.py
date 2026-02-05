@@ -170,10 +170,11 @@ async def upload_cv(request: CVUploadRequest):
 
         data = json.loads(content.strip())
         questions = data.get("questions", [])
-    except json.JSONDecodeError:
+    except json.JSONDecodeError as e:
+        content_snippet = (content or "").strip().replace("\n", " ")[:200]
         raise HTTPException(
             status_code=500,
-            detail="Failed to parse AI response. Please try again.",
+            detail=f"Failed to parse AI response: {str(e)}. Response snippet: '{content_snippet}'",
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"OpenAI API error: {str(e)}")
