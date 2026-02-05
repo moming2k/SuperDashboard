@@ -1,0 +1,14 @@
+{
+  "name": "interview-assistant",
+  "displayName": "Interview Assistant",
+  "description": "AI-powered interview assistant - upload CVs, generate interview questions with suggested answers, and chat for follow-up insights",
+  "version": "1.0.0",
+  "tab": {
+    "label": "Interviews",
+    "icon": "🎙️",
+    "order": 35
+  },
+  "frontendComponent": "InterviewAssistant",
+  "icon": "🎙️",
+  "category": "productivity"
+}
