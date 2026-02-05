@@ -178,7 +178,10 @@ async def upload_cv(request: CVUploadRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"OpenAI API error: {str(e)}")
 
-    session_id = str(uuid.uuid4())[:8]
+    session_id = None
+    # Generate a short session ID and ensure it does not collide with an existing session
+    while session_id is None or session_id in sessions:
+        session_id = str(uuid.uuid4())[:8]
     sessions[session_id] = {
         "id": session_id,
         "candidate_name": candidate_name,
