@@ -265,7 +265,15 @@ def _convert_attachment_to_markdown(filename, content_type, data):
     elif content_type == "application/pdf" or filename.endswith(".pdf"):
         # For PDFs, try to extract text if possible, otherwise note it
         try:
-            # Simple PDF text extraction (basic approach)
+            # NOTE: This is a very basic PDF text extraction approach with significant limitations:
+            # - Does not handle compressed streams (e.g., FlateDecode, LZWDecode)
+            # - Does not handle encoded text (e.g., hexadecimal, Unicode encoding)
+            # - Does not handle complex PDF structures (forms, tables, multi-column layouts)
+            # - May produce garbled or incomplete text from most modern PDFs
+            # For production use, consider using a dedicated PDF library like PyPDF2 or pdfplumber:
+            #   pip install PyPDF2
+            #   or
+            #   pip install pdfplumber
             text = data.decode("latin-1", errors="replace")
             # Extract text between stream markers (very basic)
             streams = re.findall(r'stream\s*(.*?)\s*endstream', text, re.DOTALL)
