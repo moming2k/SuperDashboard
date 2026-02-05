@@ -592,10 +592,14 @@ async def analyze_all_emails(
 ):
     """Analyze all un-analyzed emails."""
     # Find emails without AI summaries
-    analyzed_ids = db.query(EmailAISummary.email_id).subquery()
-    unanalyzed = db.query(Email).filter(
-        ~Email.id.in_(db.query(analyzed_ids))
-    ).order_by(Email.date.desc()).limit(limit).all()
+    unanalyzed = (
+        db.query(Email)
+        .outerjoin(EmailAISummary, Email.id == EmailAISummary.email_id)
+        .filter(EmailAISummary.id.is_(None))
+        .order_by(Email.date.desc())
+        .limit(limit)
+        .all()
+    )
 
     results = []
     for e in unanalyzed:
