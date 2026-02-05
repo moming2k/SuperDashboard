@@ -1,0 +1,17 @@
+{
+  "name": "ai-email",
+  "displayName": "AI Email Assistant",
+  "description": "Read-only IMAP email client with AI-powered summarization, action suggestions, reply drafting, and attachment-to-markdown conversion",
+  "version": "1.0.0",
+  "tab": {
+    "label": "Email",
+    "icon": "📧",
+    "order": 25
+  },
+  "frontendComponent": "AIEmail",
+  "icon": "📧",
+  "category": "productivity",
+  "config": {
+    "instructions": "Configure your IMAP email credentials in backend/.env:\n\nEMAIL_IMAP_HOST=imap.gmail.com\nEMAIL_IMAP_PORT=993\nEMAIL_IMAP_USER=your-email@gmail.com\nEMAIL_IMAP_PASSWORD=your-app-password\nEMAIL_IMAP_USE_SSL=true\n\nFor Gmail, use an App Password (not your regular password).\nGo to: Google Account > Security > 2-Step Verification > App passwords\n\nIMPORTANT: This plugin is READ-ONLY. It will never send or reply to emails.\nAll suggested replies are drafts for your reference only."
+  }
+}
