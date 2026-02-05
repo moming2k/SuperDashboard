@@ -107,6 +107,10 @@ class GenerateReplyRequest(BaseModel):
     tone: str = "professional"
     additional_context: Optional[str] = None
 
+class RefineReplyRequest(BaseModel):
+    instruction: str  # e.g. "make it shorter", "more formal", "add a greeting"
+    current_content: str
+
 class FetchRequest(BaseModel):
     folder: str = "INBOX"
     limit: int = 50
@@ -721,6 +725,73 @@ async def update_reply(
         version=reply.version,
         is_final=reply.is_final
     )
+
+
+@router.post("/emails/{email_id}/replies/{reply_id}/refine")
+async def refine_reply(
+    email_id: str,
+    reply_id: str,
+    request: RefineReplyRequest,
+    db: Session = Depends(get_db)
+):
+    """Use AI to refine/modify a reply draft based on a natural language instruction."""
+    client = _get_ai_client()
+
+    reply = db.query(EmailSuggestedReply).filter(
+        EmailSuggestedReply.id == reply_id,
+        EmailSuggestedReply.email_id == email_id
+    ).first()
+    if not reply:
+        raise HTTPException(status_code=404, detail="Reply not found")
+
+    # Get original email for context
+    e = db.query(Email).filter(Email.id == email_id).first()
+    email_context = ""
+    if e:
+        email_context = f"\nOriginal email from: {e.sender}\nSubject: {e.subject}"
+
+    prompt = f"""You are refining an email reply draft. Apply the user's instruction to modify the draft.
+{email_context}
+
+Current draft:
+---
+{request.current_content}
+---
+
+Instruction: {request.instruction}
+
+Return ONLY the refined email text, no explanations or commentary."""
+
+    try:
+        response = client.chat.completions.create(
+            model="gpt-4",
+            messages=[
+                {"role": "system", "content": "You are an email editing assistant. Apply the user's instruction to refine the email draft. Return only the modified email text."},
+                {"role": "user", "content": prompt}
+            ],
+            temperature=0.4
+        )
+
+        refined = response.choices[0].message.content.strip()
+
+        # Update the reply in-place
+        reply.draft_content = refined
+        reply.updated_at = datetime.utcnow()
+        db.commit()
+
+        return SuggestedReplyResponse(
+            id=reply.id,
+            email_id=reply.email_id,
+            draft_content=reply.draft_content,
+            tone=reply.tone,
+            version=reply.version,
+            is_final=reply.is_final
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Refinement failed: {str(e)}")
 
 
 @router.get("/emails/{email_id}/replies")

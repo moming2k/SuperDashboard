@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { API_BASE } from '../../config';
 
 const PLUGIN_API = `${API_BASE}/plugins/ai-email`;
@@ -35,6 +35,95 @@ function ActionBadge({ action }) {
   );
 }
 
+// ==================== Slash Command Presets ====================
+const SLASH_COMMANDS = [
+  { command: 'shorter', label: 'Make shorter', description: 'Condense the reply to be more concise', icon: '✂️' },
+  { command: 'longer', label: 'Make longer', description: 'Expand with more detail and context', icon: '📝' },
+  { command: 'formal', label: 'More formal', description: 'Adjust tone to be more professional and formal', icon: '👔' },
+  { command: 'friendly', label: 'More friendly', description: 'Adjust tone to be warmer and more approachable', icon: '😊' },
+  { command: 'fix', label: 'Fix grammar', description: 'Fix grammar, spelling, and punctuation', icon: '🔧' },
+  { command: 'bullet', label: 'Add bullet points', description: 'Restructure key points as a bullet list', icon: '📋' },
+  { command: 'urgent', label: 'Add urgency', description: 'Emphasize time-sensitivity and urgency', icon: '⚡' },
+  { command: 'soften', label: 'Soften tone', description: 'Make the message less direct or assertive', icon: '🕊️' },
+];
+
+// ==================== Slash Command Popup ====================
+function SlashCommandPopup({ query, commands, selectedIndex, onSelect, position }) {
+  const listRef = useRef(null);
+
+  const filtered = query
+    ? commands.filter(c =>
+        c.command.includes(query.toLowerCase()) ||
+        c.label.toLowerCase().includes(query.toLowerCase())
+      )
+    : commands;
+
+  useEffect(() => {
+    if (listRef.current && selectedIndex >= 0) {
+      const item = listRef.current.children[selectedIndex];
+      if (item) {
+        item.scrollIntoView({ block: 'nearest' });
+      }
+    }
+  }, [selectedIndex]);
+
+  if (filtered.length === 0 && query) {
+    return (
+      <div
+        className="absolute z-50 bg-bg-dark border border-glass-border rounded-xl shadow-2xl overflow-hidden w-80"
+        style={{ bottom: position.bottom, left: position.left }}
+      >
+        <div className="p-3 border-b border-glass-border/50">
+          <p className="text-[10px] text-text-muted uppercase tracking-wider font-bold">AI Refine</p>
+        </div>
+        <div className="p-3 text-center">
+          <p className="text-xs text-text-muted mb-2">No matching command</p>
+          <p className="text-[10px] text-text-muted">Press <kbd className="bg-glass px-1.5 py-0.5 rounded text-text-main">Enter</kbd> to send as custom instruction</p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div
+      className="absolute z-50 bg-bg-dark border border-glass-border rounded-xl shadow-2xl overflow-hidden w-80"
+      style={{ bottom: position.bottom, left: position.left }}
+    >
+      <div className="p-3 border-b border-glass-border/50">
+        <p className="text-[10px] text-text-muted uppercase tracking-wider font-bold">AI Refine — type or pick a command</p>
+      </div>
+      <div ref={listRef} className="max-h-[240px] overflow-y-auto">
+        {filtered.map((cmd, i) => (
+          <div
+            key={cmd.command}
+            onClick={() => onSelect(cmd)}
+            className={`flex items-center gap-3 px-3 py-2.5 cursor-pointer transition-colors ${
+              i === selectedIndex
+                ? 'bg-primary/20 text-text-main'
+                : 'hover:bg-glass/30 text-text-muted hover:text-text-main'
+            }`}
+          >
+            <span className="text-base w-6 text-center flex-shrink-0">{cmd.icon}</span>
+            <div className="min-w-0">
+              <p className="text-sm font-semibold truncate">/{cmd.command}</p>
+              <p className="text-[10px] text-text-muted truncate">{cmd.description}</p>
+            </div>
+          </div>
+        ))}
+      </div>
+      <div className="p-2 border-t border-glass-border/50 bg-glass/10">
+        <p className="text-[10px] text-text-muted text-center">
+          <kbd className="bg-glass px-1 py-0.5 rounded">↑↓</kbd> navigate
+          <span className="mx-2">·</span>
+          <kbd className="bg-glass px-1 py-0.5 rounded">Enter</kbd> select
+          <span className="mx-2">·</span>
+          <kbd className="bg-glass px-1 py-0.5 rounded">Esc</kbd> close
+        </p>
+      </div>
+    </div>
+  );
+}
+
 // ==================== Reply Editor ====================
 function ReplyEditor({ emailId, replies, onReplyGenerated }) {
   const [tone, setTone] = useState('professional');
@@ -43,6 +132,128 @@ function ReplyEditor({ emailId, replies, onReplyGenerated }) {
   const [editingReply, setEditingReply] = useState(null);
   const [editContent, setEditContent] = useState('');
   const [saving, setSaving] = useState(false);
+
+  // Slash command state
+  const [slashActive, setSlashActive] = useState(false);
+  const [slashQuery, setSlashQuery] = useState('');
+  const [slashSelectedIndex, setSlashSelectedIndex] = useState(0);
+  const [refining, setRefining] = useState(false);
+  const textareaRef = useRef(null);
+
+  const getFilteredCommands = () => {
+    if (!slashQuery) return SLASH_COMMANDS;
+    return SLASH_COMMANDS.filter(c =>
+      c.command.includes(slashQuery.toLowerCase()) ||
+      c.label.toLowerCase().includes(slashQuery.toLowerCase())
+    );
+  };
+
+  const executeRefine = async (instruction, replyId) => {
+    setRefining(true);
+    setSlashActive(false);
+    setSlashQuery('');
+    setSlashSelectedIndex(0);
+    try {
+      const res = await fetch(`${PLUGIN_API}/emails/${emailId}/replies/${replyId}/refine`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          instruction,
+          current_content: editContent,
+        }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setEditContent(data.draft_content);
+        onReplyGenerated(data);
+      }
+    } catch (e) {
+      console.error('Failed to refine reply', e);
+    } finally {
+      setRefining(false);
+    }
+  };
+
+  const handleSlashSelect = (cmd) => {
+    executeRefine(cmd.description, editingReply);
+  };
+
+  const handleEditKeyDown = (e) => {
+    if (slashActive) {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        const filtered = getFilteredCommands();
+        setSlashSelectedIndex(prev => Math.min(prev + 1, filtered.length - 1));
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        setSlashSelectedIndex(prev => Math.max(prev - 1, 0));
+      } else if (e.key === 'Enter') {
+        e.preventDefault();
+        const filtered = getFilteredCommands();
+        if (filtered.length > 0 && slashSelectedIndex < filtered.length) {
+          handleSlashSelect(filtered[slashSelectedIndex]);
+        } else if (slashQuery) {
+          // Custom instruction
+          executeRefine(slashQuery, editingReply);
+        }
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        setSlashActive(false);
+        setSlashQuery('');
+        setSlashSelectedIndex(0);
+        // Remove the slash text from content
+        const textarea = textareaRef.current;
+        if (textarea) {
+          const pos = textarea.selectionStart;
+          const before = editContent.substring(0, pos);
+          const slashStart = before.lastIndexOf('/');
+          if (slashStart >= 0) {
+            setEditContent(
+              editContent.substring(0, slashStart) + editContent.substring(pos)
+            );
+          }
+        }
+      } else if (e.key === 'Backspace') {
+        // If backspacing past the slash, close popup
+        const textarea = textareaRef.current;
+        if (textarea) {
+          const pos = textarea.selectionStart;
+          const before = editContent.substring(0, pos);
+          const slashStart = before.lastIndexOf('/');
+          if (pos - 1 <= slashStart) {
+            setSlashActive(false);
+            setSlashQuery('');
+            setSlashSelectedIndex(0);
+          }
+        }
+      }
+    }
+  };
+
+  const handleEditChange = (e) => {
+    const value = e.target.value;
+    const cursorPos = e.target.selectionStart;
+    setEditContent(value);
+
+    // Detect slash command trigger
+    const textBeforeCursor = value.substring(0, cursorPos);
+    const lastNewline = textBeforeCursor.lastIndexOf('\n');
+    const lineStart = lastNewline + 1;
+    const currentLine = textBeforeCursor.substring(lineStart);
+
+    // Check if line starts with / or if / was just typed
+    const slashMatch = currentLine.match(/\/(\S*)$/);
+
+    if (slashMatch) {
+      setSlashActive(true);
+      setSlashQuery(slashMatch[1] || '');
+      setSlashSelectedIndex(0);
+    } else if (slashActive) {
+      setSlashActive(false);
+      setSlashQuery('');
+      setSlashSelectedIndex(0);
+    }
+  };
 
   const generateReply = async () => {
     setGenerating(true);
@@ -69,6 +280,8 @@ function ReplyEditor({ emailId, replies, onReplyGenerated }) {
   const startEditing = (reply) => {
     setEditingReply(reply.id);
     setEditContent(reply.draft_content);
+    setSlashActive(false);
+    setSlashQuery('');
   };
 
   const saveEdit = async (replyId) => {
@@ -82,6 +295,7 @@ function ReplyEditor({ emailId, replies, onReplyGenerated }) {
       if (res.ok) {
         onReplyGenerated(await res.json());
         setEditingReply(null);
+        setSlashActive(false);
       }
     } catch (e) {
       console.error('Failed to save reply', e);
@@ -193,26 +407,61 @@ function ReplyEditor({ emailId, replies, onReplyGenerated }) {
 
           {editingReply === reply.id ? (
             <div className="space-y-3">
-              <textarea
-                value={editContent}
-                onChange={(e) => setEditContent(e.target.value)}
-                className="w-full bg-bg-dark/50 border border-glass-border rounded-lg p-4 text-sm text-text-main outline-none focus:border-primary resize-y min-h-[150px]"
-              />
-              <div className="flex gap-2 justify-end">
-                <button
-                  onClick={() => setEditingReply(null)}
-                  className="text-xs bg-glass px-3 py-1.5 rounded-lg hover:bg-glass/50 transition-colors text-text-muted"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={() => saveEdit(reply.id)}
-                  disabled={saving}
-                  className="text-xs bg-primary text-white px-4 py-1.5 rounded-lg font-semibold hover:bg-primary/80 transition-colors disabled:opacity-50"
-                >
-                  {saving ? 'Saving...' : 'Save Changes'}
-                </button>
+              <div className="relative">
+                <textarea
+                  ref={textareaRef}
+                  value={editContent}
+                  onChange={handleEditChange}
+                  onKeyDown={handleEditKeyDown}
+                  disabled={refining}
+                  className={`w-full bg-bg-dark/50 border rounded-lg p-4 text-sm text-text-main outline-none resize-y min-h-[150px] transition-colors ${
+                    refining
+                      ? 'border-accent/50 opacity-70'
+                      : slashActive
+                        ? 'border-accent'
+                        : 'border-glass-border focus:border-primary'
+                  }`}
+                />
+                {refining && (
+                  <div className="absolute inset-0 flex items-center justify-center bg-bg-dark/40 rounded-lg">
+                    <div className="flex items-center gap-2 bg-bg-dark/90 px-4 py-2 rounded-lg border border-accent/30">
+                      <div className="w-4 h-4 border-2 border-accent border-t-transparent rounded-full animate-spin" />
+                      <span className="text-sm text-accent font-semibold">Refining with AI...</span>
+                    </div>
+                  </div>
+                )}
+                {slashActive && !refining && (
+                  <SlashCommandPopup
+                    query={slashQuery}
+                    commands={SLASH_COMMANDS}
+                    selectedIndex={slashSelectedIndex}
+                    onSelect={handleSlashSelect}
+                    position={{ bottom: '100%', left: '0px' }}
+                  />
+                )}
               </div>
+              {!refining && (
+                <div className="flex items-center gap-2 justify-between">
+                  <p className="text-[10px] text-text-muted">
+                    Type <kbd className="bg-glass px-1.5 py-0.5 rounded text-accent font-bold">/</kbd> for AI refinement commands
+                  </p>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => { setEditingReply(null); setSlashActive(false); }}
+                      className="text-xs bg-glass px-3 py-1.5 rounded-lg hover:bg-glass/50 transition-colors text-text-muted"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={() => saveEdit(reply.id)}
+                      disabled={saving}
+                      className="text-xs bg-primary text-white px-4 py-1.5 rounded-lg font-semibold hover:bg-primary/80 transition-colors disabled:opacity-50"
+                    >
+                      {saving ? 'Saving...' : 'Save Changes'}
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           ) : (
             <pre className="text-sm text-text-main/90 whitespace-pre-wrap font-sans leading-relaxed">
