@@ -263,3 +263,77 @@ class MoltbookClassificationCache(Base):
     result = Column(JSON, nullable=False)  # Classification result
     created_at = Column(DateTime, default=datetime.utcnow)
     expires_at = Column(DateTime, nullable=False)  # Cache expiration time
+
+
+# =============================================================================
+# AI Email Plugin Models
+# =============================================================================
+
+class Email(Base):
+    """Model for storing fetched emails"""
+    __tablename__ = "emails"
+    __table_args__ = (
+        Index('ix_emails_date', 'date'),
+        Index('ix_emails_folder', 'folder'),
+    )
+
+    id = Column(String, primary_key=True, index=True)
+    message_id = Column(String, unique=True, nullable=False, index=True)  # IMAP Message-ID
+    subject = Column(String, nullable=True)
+    sender = Column(String, nullable=False)
+    recipients = Column(JSON, nullable=False, default=lambda: [])  # To addresses
+    cc = Column(JSON, nullable=True, default=lambda: [])
+    date = Column(DateTime, nullable=True)
+    body_text = Column(Text, nullable=True)
+    body_html = Column(Text, nullable=True)
+    folder = Column(String, nullable=False, default="INBOX")
+    is_read = Column(Boolean, nullable=False, default=False)
+    has_attachments = Column(Boolean, nullable=False, default=False)
+    raw_headers = Column(JSON, nullable=True)
+    fetched_at = Column(DateTime, default=datetime.utcnow)
+
+
+class EmailAttachment(Base):
+    """Model for storing email attachment metadata and markdown content"""
+    __tablename__ = "email_attachments"
+    __table_args__ = (
+        Index('ix_email_attachments_email_id', 'email_id'),
+    )
+
+    id = Column(String, primary_key=True, index=True)
+    email_id = Column(String, nullable=False, index=True)
+    filename = Column(String, nullable=False)
+    content_type = Column(String, nullable=True)
+    size = Column(Integer, nullable=True)
+    markdown_content = Column(Text, nullable=True)  # Converted to markdown
+    raw_content_b64 = Column(Text, nullable=True)  # Base64-encoded raw content
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class EmailAISummary(Base):
+    """Model for storing AI-generated email summaries and suggested actions"""
+    __tablename__ = "email_ai_summaries"
+
+    id = Column(String, primary_key=True, index=True)
+    email_id = Column(String, unique=True, nullable=False, index=True)
+    summary = Column(Text, nullable=True)
+    suggested_action = Column(String, nullable=True)  # e.g. "reply", "archive", "follow_up", "no_action"
+    action_details = Column(Text, nullable=True)  # Detailed explanation of the suggested action
+    needs_reply = Column(Boolean, nullable=False, default=False)
+    priority = Column(String, nullable=True)  # "high", "medium", "low"
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class EmailSuggestedReply(Base):
+    """Model for storing AI-suggested reply drafts"""
+    __tablename__ = "email_suggested_replies"
+
+    id = Column(String, primary_key=True, index=True)
+    email_id = Column(String, nullable=False, index=True)
+    draft_content = Column(Text, nullable=False)
+    tone = Column(String, nullable=True)  # "professional", "friendly", "brief"
+    version = Column(Integer, nullable=False, default=1)
+    is_final = Column(Boolean, nullable=False, default=False)  # User has approved
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
