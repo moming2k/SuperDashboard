@@ -487,11 +487,10 @@ function SnippetManager() {
                 <div className="flex items-center gap-2">
                   <button
                     onClick={(e) => copyToClipboard(snippet.code, snippet.id, e)}
-                    className={`p-2 rounded-lg transition-all ${
-                      copyFeedback === snippet.id
+                    className={`p-2 rounded-lg transition-all ${copyFeedback === snippet.id
                         ? 'bg-green-500 text-white'
                         : 'bg-bg-dark hover:bg-primary hover:text-white'
-                    }`}
+                      }`}
                     title="Copy to clipboard"
                   >
                     {copyFeedback === snippet.id ? '✓' : '📋'}
@@ -731,9 +730,12 @@ function SnippetManager() {
             <div className="flex gap-2 flex-wrap">
               <button
                 onClick={() => copyToClipboard(selectedSnippet.code, selectedSnippet.id)}
-                className="bg-primary text-white px-4 py-2 rounded-xl hover:bg-primary-hover transition-all"
+                className={`px-4 py-2 rounded-xl transition-all ${copyFeedback === selectedSnippet.id
+                    ? 'bg-green-500 text-white'
+                    : 'bg-primary text-white hover:bg-primary-hover'
+                  }`}
               >
-                📋 Copy Code
+                {copyFeedback === selectedSnippet.id ? '✓ Copied!' : '📋 Copy Code'}
               </button>
               <button
                 onClick={() => openEditForm(selectedSnippet)}

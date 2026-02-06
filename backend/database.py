@@ -296,9 +296,7 @@ class Email(Base):
 class EmailAttachment(Base):
     """Model for storing email attachment metadata and markdown content"""
     __tablename__ = "email_attachments"
-    __table_args__ = (
-        Index('ix_email_attachments_email_id', 'email_id'),
-    )
+
 
     id = Column(String, primary_key=True, index=True)
     email_id = Column(String, nullable=False, index=True)

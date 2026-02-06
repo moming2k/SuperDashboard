@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 
-const API_BASE = 'http://localhost:8000';
+import { API_BASE } from '../config';
 
 function MCPSettings({ isOpen, onClose }) {
   const [mcpServers, setMcpServers] = useState([]);

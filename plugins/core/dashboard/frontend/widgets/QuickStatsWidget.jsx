@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import config, { API_BASE } from '../../../../../frontend/src/config';
+import config, { API_BASE } from '@/config';
 
 function QuickStatsWidget() {
   const [tasks, setTasks] = useState([]);
